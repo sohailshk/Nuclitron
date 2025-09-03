@@ -1,0 +1,109 @@
+version: '3.8'
+
+services:
+  # PostgreSQL with PostGIS and pgvector extensions
+  postgres:
+    image: pgvector/pgvector:pg15
+    container_name: argo_postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-argo_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-argo_pass}
+      POSTGRES_DB: ${POSTGRES_DB:-argo_db}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./deployment/init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-argo_user}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - argo_network
+
+  # Redis for caching and session management
+  redis:
+    image: redis:7-alpine
+    container_name: argo_redis
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    networks:
+      - argo_network
+
+  # FastAPI Backend
+  api:
+    build:
+      context: .
+      dockerfile: deployment/Dockerfile.api
+    container_name: argo_api
+    environment:
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-argo_user}:${POSTGRES_PASSWORD:-argo_pass}@postgres:5432/${POSTGRES_DB:-argo_db}
+      - REDIS_URL=redis://redis:6379
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    volumes:
+      - ./src:/app/src
+      - ./data:/app/data
+    env_file:
+      - .env
+    networks:
+      - argo_network
+    restart: unless-stopped
+
+  # Streamlit Frontend
+  streamlit:
+    build:
+      context: .
+      dockerfile: deployment/Dockerfile.streamlit
+    container_name: argo_streamlit
+    environment:
+      - API_URL=http://api:8000
+    ports:
+      - "8501:8501"
+    depends_on:
+      - api
+    volumes:
+      - ./src:/app/src
+      - ./data:/app/data
+    env_file:
+      - .env
+    networks:
+      - argo_network
+    restart: unless-stopped
+
+  # Data Scheduler (for periodic Argo data updates)
+  scheduler:
+    build:
+      context: .
+      dockerfile: deployment/Dockerfile.scheduler
+    container_name: argo_scheduler
+    environment:
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-argo_user}:${POSTGRES_PASSWORD:-argo_pass}@postgres:5432/${POSTGRES_DB:-argo_db}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./src:/app/src
+      - ./data:/app/data
+    env_file:
+      - .env
+    networks:
+      - argo_network
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  argo_network:
+    driver: bridge
