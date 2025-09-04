@@ -8,7 +8,7 @@ const BeachAdvisor: React.FC = () => {
   const [input, setInput] = useState("");
   const [error, setError] = useState<string | null>(null);
 
-  const GEMINI_API_KEY = "AIzaSyAlFcAOeyQuQL7AXzR6_DX_LYDwMpraxdA";
+  const GEMINI_API_KEY = "";
 
   const handleGeneratePDF = async () => {
     if (!input.trim()) {
