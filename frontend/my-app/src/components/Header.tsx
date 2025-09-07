@@ -61,10 +61,10 @@ export const Header = () => {
               <BarChart3 className="w-4 h-4" />
               <span>Analytics</span>
             </Button>
-            <Button variant="outline" size="sm" className="hidden md:flex items-center space-x-1">
+            {/* <Button variant="outline" size="sm" className="hidden md:flex items-center space-x-1">
               <User className="w-4 h-4" />
               <span>Sign In</span>
-            </Button>
+            </Button> */}
             <Button className="btn-ocean hidden md:flex items-center space-x-1">
               <Database className="w-4 h-4" />
               <span>Data Access</span>
