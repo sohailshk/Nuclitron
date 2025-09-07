@@ -24,10 +24,9 @@ export const Header = () => {
             <span>INCOIS</span>
           </div>
           <div className="flex items-center space-x-2 text-sm">
-            <Button variant="ghost" size="sm" className="text-xs">हिन्दी</Button>
-            <Button variant="ghost" size="sm" className="text-xs">A+</Button>
-            <Button variant="ghost" size="sm" className="text-xs">A-</Button>
-            <Button variant="ghost" size="sm" className="text-xs">Screen Reader</Button>
+            <Button variant="ghost" size="sm" className="text-xs">हिन्दी</Button> 
+            {/* toggle button  */}
+         
           </div>
         </div>
         
@@ -40,9 +39,7 @@ export const Header = () => {
               </div>
               <div>
                 <h1 className="text-2xl font-bold text-primary-deep">INCOIS ARGO</h1>
-                <p className="text-sm text-muted-foreground">Indian National Centre for Ocean Information Services</p>
-                <p className="text-xs text-muted-foreground">AI-Powered Oceanographic Data Platform</p>
-              </div>
+                 </div>
             </div>
           </div>
           

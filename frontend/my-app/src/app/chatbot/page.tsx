@@ -29,10 +29,11 @@ interface Message {
   id: string;
   type: 'user' | 'bot';
   content: string;
-  timestamp: Date;
+  timestamp: string;
   suggestions?: string[];
   data?: any;
 }
+
 
 export default function Chatbot() {
   const [messages, setMessages] = useState<Message[]>([
@@ -40,7 +41,7 @@ export default function Chatbot() {
       id: '1',
       type: 'bot',
       content: 'Hello! I\'m your AI assistant for ARGO oceanographic data. I can help you explore temperature profiles, salinity data, float locations, and much more. What would you like to know?',
-      timestamp: new Date(),
+      timestamp: new Date().toISOString(),
       suggestions: [
         'Show me temperature profiles in the Arabian Sea',
         'What are the salinity levels near the equator?',
@@ -68,7 +69,7 @@ export default function Chatbot() {
       id: Date.now().toString(),
       type: 'user',
       content: inputValue,
-      timestamp: new Date()
+      timestamp: new Date().toISOString()
     };
 
     setMessages(prev => [...prev, userMessage]);
@@ -81,7 +82,7 @@ export default function Chatbot() {
         id: (Date.now() + 1).toString(),
         type: 'bot',
         content: generateBotResponse(inputValue),
-        timestamp: new Date(),
+        timestamp: new Date().toISOString(),
         suggestions: [
           'Show more details about this data',
           'Compare with other regions',
@@ -114,9 +115,9 @@ export default function Chatbot() {
     setInputValue(suggestion);
   };
 
-  const handleKeyPress = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault(); // stops the default scroll/submit
       handleSendMessage();
     }
   };
@@ -193,9 +194,10 @@ export default function Chatbot() {
                         }`}>
                           <p className="text-sm">{message.content}</p>
                           <div className="flex items-center justify-between mt-2">
-                            <span className="text-xs opacity-70">
-                              {message.timestamp.toLocaleTimeString()}
-                            </span>
+                          <span className="text-xs opacity-70">
+  {message.timestamp}
+</span>
+
                             {message.type === 'bot' && (
                               <div className="flex items-center space-x-1">
                                 <Button variant="ghost" size="sm" className="h-6 w-6 p-0">
@@ -251,28 +253,35 @@ export default function Chatbot() {
                     </div>
                   )}
                   
-                  <div ref={messagesEndRef} />
+                  {/* <div ref={messagesEndRef} /> */}
                 </div>
 
                 {/* Input */}
                 <div className="p-4 border-t border-border">
-                  <div className="flex space-x-2">
-                    <Input
-                      value={inputValue}
-                      onChange={(e) => setInputValue(e.target.value)}
-                      onKeyPress={handleKeyPress}
-                      placeholder="Ask about ARGO data, ocean temperatures, salinity, or float locations..."
-                      className="flex-1"
-                      disabled={isLoading}
-                    />
-                    <Button 
-                      onClick={handleSendMessage}
-                      disabled={!inputValue.trim() || isLoading}
-                      className="btn-ocean"
-                    >
-                      <Send className="w-4 h-4" />
-                    </Button>
-                  </div>
+                <form
+  onSubmit={(e) => {
+    e.preventDefault(); // stop page scroll/reload
+    handleSendMessage();
+  }}
+  className="flex space-x-2"
+>
+  <Input
+    value={inputValue}
+    onChange={(e) => setInputValue(e.target.value)}
+    placeholder="Ask about ARGO data, ocean temperatures, salinity, or float locations..."
+    className="flex-1"
+    disabled={isLoading}
+  />
+  <Button 
+    type="submit"
+    disabled={!inputValue.trim() || isLoading}
+    className="btn-ocean"
+  >
+    <Send className="w-4 h-4" />
+  </Button>
+</form>
+
+
                 </div>
               </Card>
             </div>
