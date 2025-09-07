@@ -19,14 +19,14 @@ export const Navigation = () => {
   const pathname = usePathname();
   
   const navItems = [
-    { label: "Home", href: "/", icon: Home },
-    { label: "Dashboard", href: "/dashboard", icon: BarChart3 },
+    // { label: "Home", href: "/", icon: Home },
+    { label: "Dashboard", href: "/", icon: BarChart3 },
     { label: "ARGO Explorer", href: "/explorer", icon: Map },
     { label: "AI Chat", href: "/chatbot", icon: MessageCircle },
-    { label: "Data Portal", href: "/data", icon: Database },
-    { label: "Admin", href: "/admin", icon: Settings },
+    // { label: "Data Portal", href: "/data", icon: Database },
+    // { label: "Admin", href: "/admin", icon: Settings },
     { label: "About", href: "/about", icon: Info },
-    { label: "Docs", href: "/docs", icon: BookOpen },
+    // { label: "Docs", href: "/docs", icon: BookOpen },
   ];
 
   return (
