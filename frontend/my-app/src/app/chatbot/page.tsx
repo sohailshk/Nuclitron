@@ -316,8 +316,8 @@ export default function Chatbot() {
               </Card>
 
               {/* Sample Queries */}
-              <Card className="card-ocean">
-                <div className="p-4">
+              <Card className="card-ocean ">
+                <div className="p-4  ">
                   <h3 className="font-semibold text-primary-deep mb-4">Sample Queries</h3>
                   <div className="space-y-2">
                     <Button
