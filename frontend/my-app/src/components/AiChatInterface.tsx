@@ -1,8 +1,12 @@
+"use client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import Link from "next/link";
+import {useRouter} from 'next/navigation'
 
 export const AiChatInterface = () => {
+    const router = useRouter();
   const exampleQueries = [
     "Show me salinity profiles near the equator in March 2023",
     "Compare BGC parameters in the Arabian Sea for the last 6 months", 
@@ -74,7 +78,7 @@ export const AiChatInterface = () => {
                         <div className="bg-white rounded-lg p-4 shadow-subtle max-w-lg">
                           <p className="text-sm mb-3">
                             I found 47 temperature profiles from 12 active ARGO floats in the Arabian Sea from the past month. 
-                            Here's what the data shows:
+                            Here&#39;s what the data shows:
                           </p>
                           <div className="bg-gradient-to-r from-chart-temperature/20 to-chart-temperature/5 p-3 rounded border-l-4 border-chart-temperature">
                             <p className="text-xs font-medium">Key Findings:</p>
@@ -88,11 +92,20 @@ export const AiChatInterface = () => {
                   </div>
                   
                   {/* Input Area */}
-                  <div className="flex gap-2">
-                    <div className="flex-1 bg-secondary/50 rounded-lg p-3 text-sm text-muted-foreground">
-                      Type your ocean data question here...
-                    </div>
-                    <Button variant="ocean">Send</Button>
+                  <div className="flex gap-2 ">
+                    {/*<div className="flex-1 bg-secondary/50 rounded-lg p-3 text-sm text-muted-foreground">*/}
+
+
+                    {/*</div>*/}
+
+                          <input
+                          placeholder=' Type your ocean data question here...'
+                          type='text'
+                          className='w-[650px]'
+                      />
+
+
+                      <Button onClick={() => { router.push('/chatbot')}} variant="ocean">Send</Button>
                   </div>
                 </CardContent>
               </Card>
