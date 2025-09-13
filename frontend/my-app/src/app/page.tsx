@@ -1,6 +1,6 @@
 "use client";
 
-import { SignInButton, SignUpButton, SignedIn, SignedOut } from '@clerk/nextjs';
+import { SignInButton, SignUpButton, SignOutButton, SignedIn, SignedOut } from '@clerk/nextjs';
 import { Button } from "@/components/ui/button";
 import { Globe, Database } from "lucide-react";
 import { useRouter } from 'next/navigation';
@@ -52,12 +52,22 @@ export default function Home() {
                 </SignUpButton>
               </SignedOut>
               <SignedIn>
-                <Button 
-                  onClick={() => router.push('/dashboard')}
-                  className="bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600 text-white"
-                >
-                  Go to Dashboard
-                </Button>
+                <div className="flex items-center space-x-3">
+                  <Button 
+                    onClick={() => router.push('/dashboard')}
+                    className="bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600 text-white"
+                  >
+                    Go to Dashboard
+                  </Button>
+                  <SignOutButton>
+                    <Button 
+                      variant="outline"
+                      className="border-gray-300 hover:bg-gray-50"
+                    >
+                      Sign out
+                    </Button>
+                  </SignOutButton>
+                </div>
               </SignedIn>
             </div>
           </div>

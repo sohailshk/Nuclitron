@@ -1,9 +1,16 @@
 
 // using Twilio SendGrid's v3 Node.js Library
 // https://github.com/sendgrid/sendgrid-nodejs
+require('dotenv').config();
 
-const sgMail = require('@sendgrid/mail')
-sgMail.setApiKey(process.env.SENDGRID_API_KEY)
+const sgMail = require('@sendgrid/mail');
+
+if (!process.env.SENDGRID_API_KEY) {
+  console.error('SENDGRID_API_KEY is not set in the environment variables');
+  process.exit(1);
+}
+
+sgMail.setApiKey(process.env.SENDGRID_API_KEY);
 // sgMail.setDataResidency('eu'); 
 // uncomment the above line if you are sending mail using a regional EU subuser
 
@@ -22,3 +29,4 @@ sgMail
   .catch((error:any) => {
     console.error(error)
   })
+  
