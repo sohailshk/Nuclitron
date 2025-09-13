@@ -100,10 +100,15 @@ export default function Dashboard() {
               </p>
             </div>
             <div className="flex items-center space-x-3 mt-4 md:mt-0">
-              <Button variant="outline" size="sm" className="flex items-center space-x-2">
-                <RefreshCw className="w-4 h-4" />
-                <span>Refresh</span>
-              </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="flex items-center space-x-2"
+              onClick={() => window.location.reload()}  // Refresh page on click
+            >
+              <RefreshCw className="w-4 h-4" />
+              <span>Refresh</span>
+            </Button>
               <Button variant="outline" size="sm" className="flex items-center space-x-2">
                 <Download className="w-4 h-4" />
                 <span>Export</span>
