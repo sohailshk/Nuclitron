@@ -21,13 +21,11 @@ import {
 export const Footer = () => {
   const currentYear = new Date().getFullYear();
 
-  const quickLinks = [
-    { label: "ARGO Data", href: "/data" },
-    { label: "Ocean Analytics", href: "/analytics" },
+  const quickLinks: { label: string; href: string }[] = [
+    { label: "ARGO Data", href: "/details" },
+    { label: "Ocean Analytics", href: "/dashboard" },
     { label: "AI Chatbot", href: "/chatbot" },
     { label: "Data Explorer", href: "/explorer" },
-    { label: "API Documentation", href: "/docs/api" },
-    { label: "User Guide", href: "/docs/guide" },
   ];
 
   const governmentLinks = [
@@ -39,20 +37,15 @@ export const Footer = () => {
     { label: "Data.gov.in", href: "https://data.gov.in" },
   ];
 
-  const resources = [
-    { label: "Research Papers", href: "/research" },
-    { label: "Publications", href: "/publications" },
-    { label: "Training Materials", href: "/training" },
-    { label: "Data Standards", href: "/standards" },
-    { label: "Quality Control", href: "/quality" },
-    { label: "Metadata", href: "/metadata" },
+  const resources: { label: string; href: string }[] = [
+    // Removed non-working internal links. Add only when pointing to real external docs.
   ];
 
   const socialLinks = [
-    { icon: Facebook, href: "#", label: "Facebook" },
-    { icon: Twitter, href: "#", label: "Twitter" },
-    { icon: Youtube, href: "#", label: "YouTube" },
-    { icon: Linkedin, href: "#", label: "LinkedIn" },
+    { icon: Facebook, href: "https://facebook.com/incois", label: "Facebook" },
+    { icon: Twitter, href: "https://x.com/incois", label: "Twitter" },
+    { icon: Youtube, href: "https://www.youtube.com/@incois", label: "YouTube" },
+    { icon: Linkedin, href: "https://www.linkedin.com/company/incois", label: "LinkedIn" },
   ];
 
   return (
@@ -81,12 +74,15 @@ export const Footer = () => {
                 return (
                   <Button
                     key={social.label}
+                    asChild
                     variant="ghost"
                     size="sm"
                     className="w-8 h-8 p-0 hover:bg-primary/10"
                     title={social.label}
                   >
-                    <Icon className="w-4 h-4" />
+                    <a href={social.href} target="_blank" rel="noopener noreferrer">
+                      <Icon className="w-4 h-4" />
+                    </a>
                   </Button>
                 );
               })}
@@ -175,26 +171,6 @@ export const Footer = () => {
           </div>
         </div>
 
-        {/* Downloads & Certifications */}
-        <div className="border-t border-blue-200 pt-6 mb-6">
-          <div className="flex flex-wrap items-center justify-between gap-4">
-            <div className="flex items-center space-x-4">
-              <Button variant="outline" size="sm" className="flex items-center space-x-2">
-                <Download className="w-4 h-4" />
-                <span>Download App</span>
-              </Button>
-              <Button variant="outline" size="sm" className="flex items-center space-x-2">
-                <FileText className="w-4 h-4" />
-                <span>User Manual</span>
-              </Button>
-            </div>
-            <div className="flex items-center space-x-2 text-sm text-muted-foreground">
-              <Award className="w-4 h-4" />
-              <span>ISO 27001 Certified</span>
-            </div>
-          </div>
-        </div>
-
         {/* Bottom Bar */}
         <div className="border-t border-blue-200 pt-6">
           <div className="flex flex-col md:flex-row items-center justify-between space-y-4 md:space-y-0">
@@ -202,20 +178,7 @@ export const Footer = () => {
               <p>&copy; {currentYear} Indian National Centre for Ocean Information Services (INCOIS)</p>
               <p>Ministry of Earth Sciences, Government of India. All rights reserved.</p>
             </div>
-            <div className="flex items-center space-x-6 text-sm">
-              <a href="/privacy" className="text-muted-foreground hover:text-primary transition-colors">
-                Privacy Policy
-              </a>
-              <a href="/terms" className="text-muted-foreground hover:text-primary transition-colors">
-                Terms of Service
-              </a>
-              <a href="/accessibility" className="text-muted-foreground hover:text-primary transition-colors">
-                Accessibility
-              </a>
-              <a href="/sitemap" className="text-muted-foreground hover:text-primary transition-colors">
-                Sitemap
-              </a>
-            </div>
+            <div className="flex items-center space-x-6 text-sm" />
           </div>
         </div>
 

@@ -29,6 +29,7 @@ import {
   Square
 } from "lucide-react";
 import { useState, useEffect } from "react";
+import { SignedIn, SignedOut, RedirectToSignIn } from '@clerk/nextjs';
 
 interface ArgoFloat {
   id: string;
@@ -152,10 +153,12 @@ export default function Explorer() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-blue-50 to-white">
-      <Header />
-      
-      <main className="container mx-auto px-4 py-8">
+    <>
+      <SignedIn>
+        <div className="min-h-screen bg-gradient-to-b from-blue-50 to-white">
+          <Header />
+          
+          <main className="container mx-auto px-4 py-8">
         <div className="max-w-7xl mx-auto">
           {/* Header */}
           <div className="mb-8">
@@ -441,7 +444,12 @@ export default function Explorer() {
         </div>
       </main>
 
-      <Footer />
-    </div>
+          <Footer />
+        </div>
+      </SignedIn>
+      <SignedOut>
+        <RedirectToSignIn />
+      </SignedOut>
+    </>
   );
 }

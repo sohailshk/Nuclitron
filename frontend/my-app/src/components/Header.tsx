@@ -3,7 +3,7 @@
 import { Button } from "@/components/ui/button";
 import { Navigation } from "./Navigation";
 import { useState } from "react";
-import { Menu, X, Globe, Search, User, Database, BarChart3 } from "lucide-react";
+import { Menu, X, Globe, Search, User, Database, BarChart3, Award } from "lucide-react";
 
 import {
     ClerkProvider,
@@ -34,8 +34,14 @@ export const Header = () => {
                         <span className="text-border">|</span>
                         <span>INCOIS</span>
                     </div>
+                    <div className="flex items-center space-x-2 text-sm text-muted-foreground">
+                    <Award className="w-4 h-4 bg-gradient-ocean rounded-full flex items-center justify-center ocean-wave shadow-ocean" />
+                    <span>ISO 27001 Certified</span>
+                    </div>
 
                 </div>
+
+                
 
                 {/* Main Header */}
                 <div className="flex items-center justify-between py-4">
@@ -68,22 +74,24 @@ export const Header = () => {
                             <BarChart3 className="w-4 h-4" />
                             <span>Analytics</span>
                         </Button>
-                        {/* <Button variant="outline" size="sm" className="hidden md:flex items-center space-x-1">
-              <User className="w-4 h-4" />
-              <span>Sign In</span>
-            </Button> */}
+                        
                         <Button className="btn-ocean hidden md:flex items-center space-x-1">
                             <Database className="w-4 h-4" />
                             <span>Data Access</span>
                         </Button>
+                        
                         <SignedOut>
-                            <SignInButton />
-                            <SignUpButton>
-                                <button className="bg-[#6c47ff] text-white rounded-full font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 cursor-pointer">
-                                    Sign Up
-                                </button>
-                            </SignUpButton>
+                            <button className="bg-gradient-to-r from-purple-500 to-indigo-600 text-white rounded-full font-semibold text-sm sm:text-base h-10 sm:h-12 px-5 sm:px-6 shadow-lg hover:from-purple-600 hover:to-indigo-700 transition duration-300 ease-in-out focus:outline-none focus:ring-2 focus:ring-purple-400">
+                                Sign In
+                            </button>
+
+                        <SignUpButton>
+                            <button className="bg-gradient-to-r from-indigo-500 to-purple-600 text-white rounded-full font-semibold text-sm sm:text-base h-10 sm:h-12 px-5 sm:px-6 shadow-lg hover:from-indigo-600 hover:to-purple-700 transition duration-300 ease-in-out focus:outline-none focus:ring-2 focus:ring-indigo-400">
+                                Sign Up
+                            </button>
+                        </SignUpButton>
                         </SignedOut>
+
                         <SignedIn>
                             <UserButton />
                         </SignedIn>
