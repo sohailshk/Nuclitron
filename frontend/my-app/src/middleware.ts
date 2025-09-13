@@ -1,6 +1,13 @@
-import { clerkMiddleware } from '@clerk/nextjs/server'
+import { clerkMiddleware, createRouteMatcher } from '@clerk/nextjs/server'
 
-export default clerkMiddleware()
+const isProtectedRoute = createRouteMatcher(['/dashboard(.*)', '/explorer(.*)', '/chatbot(.*)'])
+
+export default clerkMiddleware((auth, req) => {
+  // Redirect authenticated users from home page to dashboard
+  if (req.nextUrl.pathname === '/' && auth().userId) {
+    return Response.redirect(new URL('/dashboard', req.url))
+  }
+})
 
 export const config = {
   matcher: [

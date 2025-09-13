@@ -24,6 +24,7 @@ import {
   Search
 } from "lucide-react";
 import { useState } from "react";
+import { SignedIn, SignedOut, RedirectToSignIn } from '@clerk/nextjs';
 
 export default function Dashboard() {
   const [selectedRegion, setSelectedRegion] = useState("Indian Ocean");
@@ -81,10 +82,12 @@ export default function Dashboard() {
   ];
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-blue-50 to-white">
-      <Header />
-      
-      <main className="container mx-auto px-4 py-8">
+    <>
+      <SignedIn>
+        <div className="min-h-screen bg-gradient-to-b from-blue-50 to-white">
+          <Header />
+          
+          <main className="container mx-auto px-4 py-8">
         {/* Dashboard Header */}
         <div className="mb-8">
           <div className="flex flex-col md:flex-row items-start md:items-center justify-between mb-6">
@@ -353,7 +356,12 @@ export default function Dashboard() {
         </div>
       </main>
 
-      <Footer />
-    </div>
+          <Footer />
+        </div>
+      </SignedIn>
+      <SignedOut>
+        <RedirectToSignIn />
+      </SignedOut>
+    </>
   );
 }
