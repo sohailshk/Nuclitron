@@ -5,6 +5,7 @@ import { Footer } from "@/components/Footer";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {MailTab} from '@/components/admin/MailTab';
 import { 
   Users, 
   Database, 
@@ -28,15 +29,20 @@ import {
   Trash2,
   Plus,
   Search,
+  Mail,
   Filter,
   BarChart3,
   PieChart,
   LineChart
 } from "lucide-react";
 import { useState } from "react";
+import dynamic from 'next/dynamic';
 
 export default function Admin() {
   const [activeTab, setActiveTab] = useState('overview');
+  
+  // Import MailTab component dynamically to avoid SSR issues
+  // const MailTab = dynamic(() => import('@/components/admin/MailTab'), { ssr: false });
   const [searchTerm, setSearchTerm] = useState('');
 
   const systemStats = [
@@ -99,11 +105,11 @@ export default function Admin() {
   ];
 
   const tabs = [
-    { id: 'overview', label: 'Overview', icon: BarChart3 },
+    { id: 'overview', label: 'Overview', icon: Activity },
     { id: 'users', label: 'Users', icon: Users },
-    { id: 'data', label: 'Data Management', icon: Database },
-    { id: 'system', label: 'System', icon: Settings },
-    { id: 'security', label: 'Security', icon: Shield }
+    { id: 'mail', label: 'Mail', icon: Mail },
+    { id: 'settings', label: 'Settings', icon: Settings },
+    { id: 'security', label: 'Security', icon: Shield },
   ];
 
   const getStatusColor = (status: string) => {
@@ -327,6 +333,9 @@ export default function Admin() {
               </Card>
             </div>
           )}
+
+          {/* Mail Tab */}
+          {activeTab === 'mail' && <MailTab />}
 
           {/* Data Management Tab */}
           {activeTab === 'data' && (
