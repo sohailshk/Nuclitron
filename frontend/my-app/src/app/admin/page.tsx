@@ -1,11 +1,16 @@
 "use client";
 
+import React, { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { useAuth, useUser } from "@clerk/nextjs";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import {MailTab} from '@/components/admin/MailTab';
+import { Skeleton } from "@/components/ui/skeleton";
+import { toast } from "sonner";
+import { MailTab } from '@/components/admin/MailTab';
 import { 
   Users, 
   Database, 
@@ -35,68 +40,167 @@ import {
   PieChart,
   LineChart
 } from "lucide-react";
-import { useState } from "react";
-import dynamic from 'next/dynamic';
+
+// Types
+interface SystemStat {
+  title: string;
+  value: string;
+  change: string;
+  trend: 'up' | 'down' | 'neutral';
+  icon: React.ComponentType<{ className?: string }>;
+  color: string;
+}
+
+interface RecentActivity {
+  id: number;
+  type: string;
+  message: string;
+  time: string;
+  status: 'success' | 'warning' | 'error' | 'info';
+}
+
+interface User {
+  id: number;
+  name: string;
+  email: string;
+  role: string;
+  status: 'active' | 'inactive' | 'suspended';
+  lastLogin: string;
+}
+
+interface SystemHealth {
+  name: string;
+  value: number;
+  status: 'good' | 'warning' | 'critical';
+}
+
+const ADMIN_EMAILS = [
+  'ashtondsouza192@gmail.com',
+  // Add more admin emails here
+];
 
 export default function Admin() {
+  const router = useRouter();
+  const { isLoaded, userId, isSignedIn } = useAuth();
+  const { user } = useUser();
   const [activeTab, setActiveTab] = useState('overview');
-  
-  // Import MailTab component dynamically to avoid SSR issues
-  // const MailTab = dynamic(() => import('@/components/admin/MailTab'), { ssr: false });
   const [searchTerm, setSearchTerm] = useState('');
+  const [isLoading, setIsLoading] = useState(true);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [systemStats, setSystemStats] = useState<SystemStat[]>([]);
+  const [recentActivities, setRecentActivities] = useState<RecentActivity[]>([]);
+  const [users, setUsers] = useState<User[]>([]);
+  const [systemHealth, setSystemHealth] = useState<SystemHealth[]>([]);
 
-  const systemStats = [
-    {
-      title: 'Total Users',
-      value: '1,247',
-      change: '+12%',
-      trend: 'up',
-      icon: Users,
-      color: 'text-blue-600'
-    },
-    {
-      title: 'Data Records',
-      value: '2.4M',
-      change: '+8.5%',
-      trend: 'up',
-      icon: Database,
-      color: 'text-green-600'
-    },
-    {
-      title: 'Active Floats',
-      value: '4,123',
-      change: '+2.3%',
-      trend: 'up',
-      icon: Globe,
-      color: 'text-cyan-600'
-    },
-    {
-      title: 'System Health',
-      value: '99.8%',
-      change: '+0.2%',
-      trend: 'up',
-      icon: Activity,
-      color: 'text-purple-600'
+  // Check authentication and authorization
+  useEffect(() => {
+    if (!isLoaded) return;
+
+    if (!isSignedIn) {
+      router.push('/sign-in');
+      return;
     }
-  ];
 
-  const recentActivities = [
-    { id: 1, type: 'user', message: 'New user registration: Dr. Sarah Johnson', time: '2 min ago', status: 'success' },
-    { id: 2, type: 'data', message: 'Data quality check completed for 1,200 profiles', time: '5 min ago', status: 'success' },
-    { id: 3, type: 'system', message: 'System backup completed successfully', time: '15 min ago', status: 'success' },
-    { id: 4, type: 'alert', message: 'ARGO-2901237 requires maintenance', time: '1 hour ago', status: 'warning' },
-    { id: 5, type: 'data', message: 'New ARGO float deployed in Bay of Bengal', time: '2 hours ago', status: 'success' }
-  ];
+    // Check if user is admin
+    const checkAdmin = async () => {
+      try {
+        const email = user?.primaryEmailAddress?.emailAddress;
+        const userIsAdmin = email ? ADMIN_EMAILS.includes(email) : false;
+        setIsAdmin(userIsAdmin);
+        
+        if (!userIsAdmin) {
+          toast.error('You do not have permission to access this page');
+          router.push('/unauthorized');
+          return;
+        }
 
-  const users = [
-    { id: 1, name: 'Dr. Sarah Johnson', email: 'sarah.johnson@incois.gov.in', role: 'Researcher', status: 'active', lastLogin: '2 hours ago' },
-    { id: 2, name: 'Prof. Rajesh Kumar', email: 'rajesh.kumar@incois.gov.in', role: 'Admin', status: 'active', lastLogin: '1 day ago' },
-    { id: 3, name: 'Dr. Priya Sharma', email: 'priya.sharma@incois.gov.in', role: 'Analyst', status: 'active', lastLogin: '3 hours ago' },
-    { id: 4, name: 'Dr. Michael Chen', email: 'michael.chen@incois.gov.in', role: 'Researcher', status: 'inactive', lastLogin: '1 week ago' },
-    { id: 5, name: 'Dr. Aisha Patel', email: 'aisha.patel@incois.gov.in', role: 'Data Manager', status: 'active', lastLogin: '30 min ago' }
-  ];
+        // Load data
+        await loadDashboardData();
+      } catch (error) {
+        console.error('Error checking admin status:', error);
+        toast.error('Failed to verify admin access');
+        router.push('/');
+      } finally {
+        setIsLoading(false);
+      }
+    };
 
-  const systemHealth = [
+    checkAdmin();
+  }, [isLoaded, isSignedIn, router, user]);
+
+  const loadDashboardData = async () => {
+    try {
+      setIsLoading(true);
+      // TODO: Replace with actual API calls
+      // const stats = await fetch('/api/admin/stats').then(res => res.json());
+      // const activities = await fetch('/api/admin/activities').then(res => res.json());
+      // const users = await fetch('/api/admin/users').then(res => res.json());
+      // const health = await fetch('/api/admin/health').then(res => res.json());
+      
+      // Mock data - replace with actual API calls
+      const mockStats: SystemStat[] = [
+        {
+          title: 'Total Users',
+          value: '1,247',
+          change: '+12%',
+          trend: 'up',
+          icon: Users,
+          color: 'text-blue-600'
+        },
+        // ... other mock data
+      ];
+      
+      setSystemStats(mockStats);
+      // Set other states with mock data
+      
+    } catch (error) {
+      console.error('Error loading dashboard data:', error);
+      toast.error('Failed to load dashboard data');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  if (!isLoaded || isLoading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-b from-blue-50 to-white">
+        <Header />
+        <main className="container mx-auto px-4 py-8">
+          <div className="max-w-7xl mx-auto">
+            <div className="flex flex-col space-y-6">
+              <Skeleton className="h-12 w-1/3" />
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                {[1, 2, 3, 4].map((i) => (
+                  <Skeleton key={i} className="h-32 rounded-lg" />
+                ))}
+              </div>
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                <Skeleton className="h-80 rounded-lg" />
+                <Skeleton className="h-80 rounded-lg" />
+              </div>
+            </div>
+          </div>
+        </main>
+        <Footer />
+      </div>
+    );
+  }
+
+  if (!isAdmin) {
+    return (
+      <div className="min-h-screen bg-gradient-to-b from-blue-50 to-white flex items-center justify-center">
+        <div className="text-center p-8">
+          <Shield className="w-16 h-16 mx-auto text-red-500 mb-4" />
+          <h2 className="text-2xl font-bold text-primary-deep mb-2">Access Denied</h2>
+          <p className="text-muted-foreground mb-6">You don't have permission to access this page.</p>
+          <Button onClick={() => router.push('/')}>Return to Home</Button>
+        </div>
+      </div>
+    );
+  }
+
+  // System health data
+  const systemHealthData: SystemHealth[] = [
     { name: 'CPU Usage', value: 45, status: 'good' },
     { name: 'Memory Usage', value: 67, status: 'good' },
     { name: 'Disk Usage', value: 78, status: 'warning' },
@@ -104,6 +208,7 @@ export default function Admin() {
     { name: 'Database Connections', value: 23, status: 'good' }
   ];
 
+  // Tabs configuration
   const tabs = [
     { id: 'overview', label: 'Overview', icon: Activity },
     { id: 'users', label: 'Users', icon: Users },
@@ -135,8 +240,18 @@ export default function Admin() {
   return (
     <div className="min-h-screen bg-gradient-to-b from-blue-50 to-white">
       <Header />
-      
-      <main className="container mx-auto px-4 py-8">
+      {!isAdmin ? (
+        <div className="flex items-center justify-center min-h-[60vh]">
+          <div className="text-center p-8">
+            <Shield className="w-16 h-16 mx-auto text-red-500 mb-4" />
+            <h2 className="text-2xl font-bold text-primary-deep mb-2">Access Denied</h2>
+            <p className="text-muted-foreground mb-6">You don't have permission to access this page.</p>
+            <Button onClick={() => router.push('/')}>Return to Home</Button>
+          </div>
+        </div>
+      ) : (
+        <>
+          <main className="container mx-auto px-4 py-8">
         <div className="max-w-7xl mx-auto">
           {/* Header */}
           <div className="mb-8">
@@ -546,8 +661,9 @@ export default function Admin() {
           )}
         </div>
       </main>
-
       <Footer />
+        </>
+      )}
     </div>
   );
 }

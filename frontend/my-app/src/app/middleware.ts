@@ -8,7 +8,13 @@ const ADMIN_EMAILS = [
 ];
 
 // Define public routes that don't require authentication
-const isPublicRoute = createRouteMatcher(['/']);
+const isPublicRoute = createRouteMatcher([
+  '/',
+  '/sign-in(.*)',
+  '/sign-up(.*)',
+  '/aboutus(.*)',
+  '/unauthorized(.*)'
+]);
 
 // This example protects all routes including api/trpc routes
 export default clerkMiddleware(async (auth, req) => {
@@ -17,17 +23,16 @@ export default clerkMiddleware(async (auth, req) => {
   const isPublicRouteMatch = isPublicRoute(req);
   const isAdminRoute = req.nextUrl.pathname.startsWith('/admin');
   const isProtectedRoute = [
-    '/dashboard(.*)',
-    '/explorer(.*)',
-    
-  ].some(route => req.nextUrl.pathname.match(new RegExp(`^${route}$`)));
+    '/dashboard',
+    '/explorer',
+  ].some(route => req.nextUrl.pathname.startsWith(route));
 
   // Handle public routes
   if (isPublicRouteMatch) {
     return NextResponse.next();
   }
 
-    // Handle home page redirection for authenticated users
+  // Handle home page redirection for authenticated users
   if (userId && req.nextUrl.pathname === '/') {
     return NextResponse.redirect(new URL('/dashboard', req.url));
   }
@@ -42,7 +47,7 @@ export default clerkMiddleware(async (auth, req) => {
     }
 
     // Ensure userEmail exists and is in the allowed admin list
-    if (!userEmail || !ADMIN_EMAILS.some(email => email.toLowerCase() === userEmail.toLowerCase())) {
+    if (!userEmail || !ADMIN_EMAILS.includes(userEmail)) {
       // Redirect to unauthorized page or dashboard if not authorized
       const unauthorizedUrl = new URL('/unauthorized', req.url);
       return NextResponse.redirect(unauthorizedUrl);
