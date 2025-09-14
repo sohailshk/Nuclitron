@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server';
 
 // List of allowed admin emails (move to environment variables in production)
 const ADMIN_EMAILS = [
-  'ashtondsouza192@gmail.com',
+  'naitikmehta114@gmail.com',
   // Add more admin emails here
 ];
 

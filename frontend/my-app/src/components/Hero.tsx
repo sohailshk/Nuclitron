@@ -64,6 +64,16 @@ export const Hero = () => {
                 <span>AI Chat</span>
               </Button>
             </Link>
+            <Link href="/map">
+              <Button
+                variant="outline"
+                size="lg"
+                className="text-lg px-8 py-4 bg-white/10 border-white/30 text-white hover:bg-white hover:text-primary-deep flex items-center space-x-2"
+              >
+                <Map className="w-5 h-5" />
+                <span>Map Visualization</span>
+              </Button>
+            </Link>
             <Button
               variant="outline"
               size="lg"

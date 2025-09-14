@@ -5,6 +5,7 @@ import { Footer } from "@/components/Footer";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import ArgoDataGraphs from "@/components/ArgoDataGraphs";
 import { 
   MapPin, 
   Search, 
@@ -165,10 +166,10 @@ export default function Explorer() {
             <div className="flex flex-col md:flex-row items-start md:items-center justify-between mb-6">
               <div>
                 <h1 className="text-3xl font-bold text-primary-deep mb-2">
-                  ARGO Data Explorer
+                  ARGO Data Analytics
                 </h1>
                 <p className="text-muted-foreground">
-                  Interactive map and data exploration for ARGO float network
+                  Interactive charts and data visualization for ARGO float network
                 </p>
               </div>
               <div className="flex items-center space-x-3 mt-4 md:mt-0">
@@ -237,85 +238,10 @@ export default function Explorer() {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
-            {/* Map Container */}
-            <div className="lg:col-span-3">
-              <Card className="card-ocean h-[600px] relative overflow-hidden">
-                {/* Map Header */}
-                <div className="absolute top-4 left-4 right-4 z-10">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center space-x-2 bg-white/90 backdrop-blur-sm rounded-lg px-3 py-2">
-                      <Globe className="w-4 h-4 text-primary" />
-                      <span className="text-sm font-medium">ARGO Float Network</span>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <div className="flex bg-white/90 backdrop-blur-sm rounded-lg">
-                        {(['ocean', 'satellite', 'terrain'] as const).map((view) => (
-                          <Button
-                            key={view}
-                            variant={mapView === view ? "default" : "ghost"}
-                            size="sm"
-                            onClick={() => setMapView(view)}
-                            className="text-xs"
-                          >
-                            {view.charAt(0).toUpperCase() + view.slice(1)}
-                          </Button>
-                        ))}
-                      </div>
-                      <div className="flex bg-white/90 backdrop-blur-sm rounded-lg">
-                        <Button variant="ghost" size="sm">
-                          <ZoomIn className="w-4 h-4" />
-                        </Button>
-                        <Button variant="ghost" size="sm">
-                          <ZoomOut className="w-4 h-4" />
-                        </Button>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Map Content */}
-                <div className="w-full h-full bg-gradient-to-br from-blue-100 via-blue-200 to-cyan-200 relative">
-                  {/* Ocean Background */}
-                  <div className="absolute inset-0 opacity-30">
-                    <div className="w-full h-full bg-gradient-to-br from-blue-400 via-cyan-400 to-blue-600"></div>
-                  </div>
-                  
-                  {/* ARGO Float Markers */}
-                  {filteredFloats.map((float) => (
-                    <div
-                      key={float.id}
-                      className="absolute transform -translate-x-1/2 -translate-y-1/2 cursor-pointer"
-                      style={{
-                        left: `${((float.longitude + 180) / 360) * 100}%`,
-                        top: `${((90 - float.latitude) / 180) * 100}%`
-                      }}
-                      onClick={() => setSelectedFloat(float)}
-                    >
-                      <div className={`w-4 h-4 rounded-full border-2 border-white shadow-lg ${
-                        selectedFloat?.id === float.id ? 'scale-150' : ''
-                      } ${getStatusColor(float.status)} transition-transform duration-200`}></div>
-                      {selectedFloat?.id === float.id && (
-                        <div className="absolute top-6 left-1/2 transform -translate-x-1/2 bg-white rounded-lg shadow-lg p-2 min-w-[200px]">
-                          <div className="text-xs font-semibold text-primary-deep">{float.name}</div>
-                          <div className="text-xs text-muted-foreground">{float.id}</div>
-                          <div className="text-xs text-muted-foreground">{float.region}</div>
-                        </div>
-                      )}
-                    </div>
-                  ))}
-
-                  {/* Map Overlay Info */}
-                  <div className="absolute bottom-4 left-4 bg-white/90 backdrop-blur-sm rounded-lg p-3">
-                    <div className="text-sm font-medium text-primary-deep mb-2">Map Info</div>
-                    <div className="text-xs text-muted-foreground space-y-1">
-                      <div>View: {mapView.charAt(0).toUpperCase() + mapView.slice(1)}</div>
-                      <div>Floats: {filteredFloats.length} visible</div>
-                      <div>Active: {filteredFloats.filter(f => f.status === 'active').length}</div>
-                    </div>
-                  </div>
-                </div>
-              </Card>
+          <div className="grid grid-cols-1 gap-8">
+            {/* Analytics Container */}
+            <div className="w-full">
+              <ArgoDataGraphs />
             </div>
 
             {/* Sidebar */}
