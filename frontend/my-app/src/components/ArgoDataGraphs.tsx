@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useMemo, useRef } from 'react';
+import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import { 
   LineChart, 
   Line, 
@@ -16,8 +16,33 @@ import {
   Bar,
   AreaChart,
   Area,
-  ReferenceLine
+  ReferenceLine,
+  ZAxis,
+  Cell
 } from 'recharts';
+import { argoApiService, ArgoApiResponse } from '@/services/argoApi';
+import { ArgoDataPoint } from '@/types/argo';
+import { 
+  Card, 
+  CardContent, 
+  CardDescription, 
+  CardHeader, 
+  CardTitle 
+} from '@/components/ui/card';
+import { 
+  Tabs, 
+  TabsContent, 
+  TabsList, 
+  TabsTrigger 
+} from '@/components/ui/tabs';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { 
+  Thermometer, Droplets, Waves, Activity, Globe, Calendar,
+  TrendingUp, Download, RefreshCw, AlertCircle, Search, ChevronDown
+} from 'lucide-react';
+import jsPDF from 'jspdf';
+import html2canvas from 'html2canvas';
 
 declare module 'jspdf' {
   interface jsPDF {
@@ -35,201 +60,58 @@ declare module 'jspdf' {
     save(filename: string): void;
   }
 }
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Button } from '@/components/ui/button';
-import { 
-  Thermometer, 
-  Droplets, 
-  Waves, 
-  Activity, 
-  Calendar,
-  MapPin,
-  TrendingUp,
-  Filter,
-  Download,
-  RefreshCw
-} from 'lucide-react';
-import jsPDF from 'jspdf';
-import html2canvas from 'html2canvas';
 
-// Generate comprehensive ARGO data with global ocean coverage
-const generateArgoData = (timeRange: string, selectedRegion: string) => {
-  const regions = [
-    'North Pacific', 'South Pacific', 'North Atlantic', 'South Atlantic',
-    'Indian Ocean', 'Southern Ocean', 'Arctic Ocean', 'Mediterranean Sea',
-    'Arabian Sea', 'Bay of Bengal', 'South China Sea', 'Caribbean Sea',
-    'Coral Sea', 'Tasman Sea', 'Norwegian Sea', 'Barents Sea'
-  ];
+// Use the API service to fetch ARGO data
+export const useArgoData = (timeRange: string, selectedRegion: string) => {
+  const [data, setData] = useState<ArgoDataPoint[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<Error | null>(null);
+  const [totalFloats, setTotalFloats] = useState(0);
+  const [lastUpdated, setLastUpdated] = useState<string>('');
+  const [dataSource, setDataSource] = useState<'api' | 'mock'>('mock');
   
-  // Type definition for region base counts
-  type RegionBaseCounts = {
-    [key: string]: { base: number; count: number };
-  };
-
-  // Generate region-specific float IDs with unique counts per region
-  const getRegionFloatIds = (region: string, timeRange: string) => {
-    const regionBaseCounts: RegionBaseCounts = {
-      'North Pacific': { base: 2901, count: 42 },
-      'South Pacific': { base: 2902, count: 38 },
-      'North Atlantic': { base: 2903, count: 45 },
-      'South Atlantic': { base: 2904, count: 35 },
-      'Indian Ocean': { base: 2905, count: 32 },
-      'Southern Ocean': { base: 2906, count: 28 },
-      'Arctic Ocean': { base: 2907, count: 15 },
-      'Mediterranean Sea': { base: 2908, count: 22 },
-      'Arabian Sea': { base: 2909, count: 18 },
-      'Bay of Bengal': { base: 2910, count: 16 },
-      'South China Sea': { base: 2911, count: 20 },
-      'Caribbean Sea': { base: 2912, count: 15 },
-      'Coral Sea': { base: 2913, count: 12 },
-      'Tasman Sea': { base: 2914, count: 10 },
-      'Norwegian Sea': { base: 2915, count: 8 },
-      'Barents Sea': { base: 2916, count: 6 }
-    };
-    
-    // Adjust count based on time range (more data points for longer time ranges)
-    const rangeFactor = {
-      'Last Week': 0.3,
-      'Last Month': 0.6,
-      'Last 3 Months': 0.8,
-      'All Time': 1.0
-    }[timeRange] || 0.6;
-    
-    const { base, count } = regionBaseCounts[region] || { base: 2900, count: 10 };
-    const adjustedCount = Math.max(5, Math.floor(count * rangeFactor));
-    
-    return Array.from({length: adjustedCount}, (_, i) => {
-      // Add some randomness to float IDs within each region
-      const floatVariant = Math.floor(Math.random() * 100);
-      return `${base}${String(100 + i).padStart(3, '0')}${String(floatVariant).padStart(2, '0')}`;
-    });
-  };
-  const data = [];
-  
-  // Type definition for region characteristics
-  type RegionCharacteristics = {
-    [key: string]: {
-      tempRange: [number, number];
-      salinityRange: [number, number];
-      depthRange: [number, number];
-    };
-  };
-
-  // Regional characteristics for more realistic data
-  const regionCharacteristics: RegionCharacteristics = {
-    'North Pacific': { tempRange: [2, 20], salinityRange: [32, 35], depthRange: [0, 4000] },
-    'South Pacific': { tempRange: [5, 25], salinityRange: [33, 36], depthRange: [0, 3500] },
-    'North Atlantic': { tempRange: [0, 18], salinityRange: [34, 37], depthRange: [0, 5000] },
-    'South Atlantic': { tempRange: [3, 22], salinityRange: [33, 36], depthRange: [0, 4500] },
-    'Indian Ocean': { tempRange: [8, 30], salinityRange: [33, 37], depthRange: [0, 4000] },
-    'Southern Ocean': { tempRange: [-2, 8], salinityRange: [33, 35], depthRange: [0, 6000] },
-    'Arctic Ocean': { tempRange: [-2, 5], salinityRange: [28, 35], depthRange: [0, 3000] },
-    'Mediterranean Sea': { tempRange: [12, 28], salinityRange: [36, 39], depthRange: [0, 2000] },
-    'Arabian Sea': { tempRange: [18, 32], salinityRange: [35, 37], depthRange: [0, 3500] },
-    'Bay of Bengal': { tempRange: [20, 30], salinityRange: [30, 35], depthRange: [0, 3000] },
-    'South China Sea': { tempRange: [15, 30], salinityRange: [32, 35], depthRange: [0, 2500] },
-    'Caribbean Sea': { tempRange: [22, 30], salinityRange: [35, 37], depthRange: [0, 2000] },
-    'Coral Sea': { tempRange: [18, 28], salinityRange: [34, 36], depthRange: [0, 3000] },
-    'Tasman Sea': { tempRange: [8, 22], salinityRange: [34, 36], depthRange: [0, 4000] },
-    'Norwegian Sea': { tempRange: [-1, 12], salinityRange: [34, 36], depthRange: [0, 3500] },
-    'Barents Sea': { tempRange: [-2, 8], salinityRange: [33, 35], depthRange: [0, 2000] }
-  };
-
-  // Determine time range parameters
-  const now = new Date();
-  let maxDaysBack, dataPoints;
-  
-  switch (timeRange) {
-    case 'Last Week':
-      maxDaysBack = 7;
-      dataPoints = 200;
-      break;
-    case 'Last Month':
-      maxDaysBack = 30;
-      dataPoints = 400;
-      break;
-    case 'Last 3 Months':
-      maxDaysBack = 90;
-      dataPoints = 800;
-      break;
-    case 'All Time':
-      maxDaysBack = 365;
-      dataPoints = 1200;
-      break;
-    default:
-      maxDaysBack = 30;
-      dataPoints = 400;
-  }
-  
-  // Filter regions based on selection and prepare float IDs
-  const targetRegions = selectedRegion === 'All' ? regions : [selectedRegion];
-  
-  // Pre-generate float IDs for each region with time range consideration
-  const regionFloats: { [key: string]: string[] } = targetRegions.reduce((acc, region) => ({
-    ...acc,
-    [region]: getRegionFloatIds(region, timeRange)
-  }), {});
-  
-  // Calculate data points per region for balanced distribution
-  const dataPointsPerRegion = Math.ceil(dataPoints / targetRegions.length);
-  
-  for (let region of targetRegions) {
-    const regionDataPoints = region === targetRegions[targetRegions.length - 1] ? 
-      dataPoints - (dataPointsPerRegion * (targetRegions.length - 1)) : 
-      dataPointsPerRegion;
+  const fetchData = useCallback(async (): Promise<ArgoApiResponse> => {
+    setIsLoading(true);
+    try {
+      const response = await argoApiService.fetchArgoData(timeRange, selectedRegion);
+      setData(response.data);
+      setTotalFloats(response.totalFloats);
+      setLastUpdated(response.lastUpdated);
+      setDataSource(response.dataSource);
+      setError(null);
       
-    for (let i = 0; i < regionDataPoints; i++) {
-    const daysAgo = Math.floor(Math.random() * maxDaysBack);
-    const hoursAgo = daysAgo * 24 + Math.floor(Math.random() * 24);
-    const date = new Date(now.getTime() - hoursAgo * 60 * 60 * 1000);
-    
-      const characteristics = regionCharacteristics[region];
-      const regionFloatIds = regionFloats[region];
-    
-    const depth = Math.random() * characteristics.depthRange[1];
-    const tempVariation = characteristics.tempRange[0] + 
-      (characteristics.tempRange[1] - characteristics.tempRange[0]) * Math.random();
-    const baseTemp = tempVariation - (depth / 200) + (Math.random() - 0.5) * 2;
-    
-    const salinityVariation = characteristics.salinityRange[0] + 
-      (characteristics.salinityRange[1] - characteristics.salinityRange[0]) * Math.random();
-    const baseSalinity = salinityVariation + (depth / 1000) + (Math.random() - 0.5) * 0.5;
-    
-    // Add seasonal variation based on actual date
-    const seasonalFactor = Math.sin((date.getMonth() / 12) * 2 * Math.PI);
-    const seasonalTempAdjustment = seasonalFactor * 2;
-    
-    // Add historical trend (older data slightly different)
-    const ageFactor = daysAgo / maxDaysBack;
-    const historicalAdjustment = ageFactor * (Math.random() - 0.5) * 3;
-    
-    data.push({
-      id: i,
-      floatId: regionFloatIds[Math.floor(Math.random() * regionFloatIds.length)],
-      date: date.toISOString().split('T')[0],
-      time: date.toLocaleTimeString('en-US', { hour12: false }),
-      timestamp: date.getTime(),
-      region,
-      latitude: -80 + Math.random() * 160,
-      longitude: -180 + Math.random() * 360,
-      depth: Math.round(depth),
-      temperature: Math.round((baseTemp + seasonalTempAdjustment + historicalAdjustment) * 100) / 100,
-      salinity: Math.round((baseSalinity + historicalAdjustment * 0.1) * 100) / 100,
-      pressure: Math.round(depth * 1.025),
-      oxygen: Math.round((10 - depth/400 + Math.random() * 2 + historicalAdjustment * 0.5) * 100) / 100,
-      chlorophyll: Math.round((Math.random() * 3 + depth/1000 + historicalAdjustment * 0.2) * 100) / 100,
-      ph: Math.round((8.2 - depth/1500 + Math.random() * 0.3 + historicalAdjustment * 0.1) * 100) / 100,
-      nitrate: Math.round((Math.random() * 20 + depth/200 + historicalAdjustment) * 100) / 100,
-      phosphate: Math.round((Math.random() * 3 + depth/800 + historicalAdjustment * 0.3) * 100) / 100,
-      isRecent: hoursAgo < 6 // Mark recent data for highlighting
-    });
+      console.log('ARGO data fetched successfully');
+      return response;
+    } catch (err) {
+      console.error('Error fetching ARGO data:', err);
+      const error = err instanceof Error ? err : new Error('Failed to fetch data');
+      setError(error);
+      throw error;
+    } finally {
+      setIsLoading(false);
     }
-  }
-  
-  // Shuffle data to mix regions (optional, can be removed if you want regions grouped)
-  const shuffledData = data.sort(() => Math.random() - 0.5);
-  return shuffledData.sort((a, b) => b.timestamp - a.timestamp); // Most recent first
+  }, [timeRange, selectedRegion]);
+
+  // Initial data fetch
+  useEffect(() => {
+    fetchData().catch(console.error);
+  }, [fetchData]);
+
+  // Create a stable refetch function
+  const refetch = useCallback(() => {
+    console.log('Refreshing ARGO data...');
+    return fetchData();
+  }, [fetchData]);
+
+  return { 
+    data, 
+    isLoading, 
+    error, 
+    totalFloats, 
+    lastUpdated, 
+    dataSource,
+    refetch
+  };
 };
 
 // Generate dynamic time series data for trends
@@ -315,7 +197,31 @@ const ArgoDataGraphs: React.FC = () => {
   const [selectedParameter, setSelectedParameter] = useState<string>('temperature');
   const [activeTab, setActiveTab] = useState<string>('overview');
   const [timeRange, setTimeRange] = useState<string>('Last Month');
+  const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
   const chartRef = useRef<HTMLDivElement>(null);
+  
+  // Use the custom hook to fetch ARGO data
+  const { 
+    data: argoData, 
+    isLoading, 
+    error, 
+    totalFloats, 
+    lastUpdated,
+    dataSource,
+    refetch: refetchData 
+  } = useArgoData(timeRange, selectedRegion);
+  
+  // Handle refresh action
+  const handleRefresh = async () => {
+    try {
+      setIsRefreshing(true);
+      await refetchData();
+    } catch (error) {
+      console.error('Error refreshing data:', error);
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
 
   // Helper function to load images with CORS support and retry logic
   const loadImage = async (url: string, retries = 3, delay = 1000): Promise<HTMLImageElement> => {
@@ -576,9 +482,63 @@ const ArgoDataGraphs: React.FC = () => {
     }
   };
 
-  const argoData = useMemo(() => generateArgoData(timeRange, selectedRegion), [timeRange, selectedRegion]);
-  const timeSeriesData = useMemo(() => generateTimeSeriesData(), []);
-  const depthProfiles = useMemo(() => generateDepthProfiles(), []);
+  // Generate time series data based on the fetched ARGO data
+  const timeSeriesData = useMemo(() => {
+    if (isLoading) return [];
+    
+    const now = new Date();
+    const hourlyData = Array(24).fill(0).map((_, i) => {
+      const hour = new Date(now.getTime() - (23 - i) * 60 * 60 * 1000);
+      const hourData = argoData.filter(item => 
+        new Date(item.timestamp).getHours() === hour.getHours() &&
+        new Date(item.timestamp).toDateString() === hour.toDateString()
+      );
+      
+      if (hourData.length === 0) return null;
+      
+      const avgTemp = hourData.reduce((sum, item) => sum + item.temperature, 0) / hourData.length;
+      const avgSalinity = hourData.reduce((sum, item) => sum + item.salinity, 0) / hourData.length;
+      
+      return {
+        date: hour.toISOString().split('T')[0],
+        time: hour.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
+        hour: hour.getHours(),
+        timestamp: hour.getTime(),
+        avgTemperature: parseFloat(avgTemp.toFixed(2)),
+        avgSalinity: parseFloat(avgSalinity.toFixed(2)),
+        totalProfiles: hourData.length,
+        isLive: i >= 22
+      };
+    }).filter(Boolean);
+    
+    return hourlyData.length > 0 ? hourlyData : generateTimeSeriesData();
+  }, [argoData, isLoading]);
+
+  // Generate depth profiles based on the fetched ARGO data
+  const depthProfiles = useMemo(() => {
+    if (isLoading) return [];
+    
+    const profiles: any[] = [];
+    const profileCount = Math.min(5, Math.ceil(argoData.length / 100) || 1);
+    
+    for (let i = 0; i < profileCount; i++) {
+      const profileId = `Profile ${i + 1}`;
+      const profileData = argoData
+        .filter((_, idx) => idx % profileCount === i)
+        .sort((a, b) => a.depth - b.depth);
+      
+      if (profileData.length > 0) {
+        profiles.push(...profileData.map(item => ({
+          ...item,
+          profileId,
+          temperature: item.temperature || 0,
+          salinity: item.salinity || 0
+        })));
+      }
+    }
+    
+    return profiles.length > 0 ? profiles : generateDepthProfiles();
+  }, [argoData, isLoading]);
 
   const filteredData = useMemo(() => {
     return argoData.filter(item => 
@@ -586,7 +546,10 @@ const ArgoDataGraphs: React.FC = () => {
     );
   }, [argoData, selectedRegion]);
 
-  const regions = ['All', 'North Pacific', 'South Pacific', 'North Atlantic', 'South Atlantic', 'Indian Ocean', 'Southern Ocean', 'Arctic Ocean', 'Mediterranean Sea', 'Arabian Sea', 'Bay of Bengal', 'South China Sea', 'Caribbean Sea'];
+  const regions = useMemo(() => {
+    const uniqueRegions = [...new Set(argoData.map(item => item.region))];
+    return ['All', ...uniqueRegions.filter(Boolean).sort()];
+  }, [argoData]);
 
   const CustomTooltip = ({ active, payload, label }: any) => {
     if (active && payload && payload.length) {
@@ -606,47 +569,193 @@ const ArgoDataGraphs: React.FC = () => {
     return null;
   };
 
+  const [showObservations, setShowObservations] = useState(false);
+  const [showAdvisories, setShowAdvisories] = useState(false);
+
   return (
     <div className="space-y-6" ref={chartRef}>
-      {/* Control Panel */}
-      <div className="flex flex-wrap items-center justify-between gap-4 p-4 bg-muted/50 rounded-lg">
-        <div className="flex items-center space-x-2">
-          <MapPin className="w-4 h-4 text-muted-foreground" />
-          <select 
-            value={selectedRegion}
-            onChange={(e) => setSelectedRegion(e.target.value)}
-            className="px-3 py-2 border border-border rounded-md bg-white"
+      {/* Title */}
+      <h2 className="text-2xl font-bold text-gray-900">ARGO Data Visualization</h2>
+      
+      {/* Key Oceanographic Insights Dropdowns - Stacked Layout */}
+      <div className="space-y-4 mb-6">
+        <div className="w-full">
+          <button
+            onClick={() => setShowObservations(!showObservations)}
+            className="w-full flex items-center justify-between p-4 bg-blue-50 hover:bg-blue-100 rounded-lg border border-blue-300 transition-colors"
           >
-            {regions.map(region => (
-              <option key={region} value={region}>{region}</option>
-            ))}
-          </select>
+            <div className="flex items-center gap-2">
+              <span className="text-blue-500">📊</span>
+              <span className="font-semibold text-blue-900">Top 10 Observations</span>
+            </div>
+            <ChevronDown className={`w-5 h-5 text-blue-600 transition-transform ${showObservations ? 'rotate-180' : ''}`} />
+          </button>
+          {showObservations && (
+            <Card className="mt-2 border-l-4 border-l-blue-500">
+              <CardContent className="pt-4">
+                <ul className="space-y-2 text-sm">
+              <li className="flex items-start gap-2">
+                <span className="text-blue-500 font-bold">1.</span>
+                <span>Temperature gradient strongest at 15°S latitude (4.2°C/100m)</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="text-blue-500 font-bold">2.</span>
+                <span>Salinity minimum layer detected at 120m depth (34.1 PSU)</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="text-blue-500 font-bold">3.</span>
+                <span>Arabian Sea upwelling zone active - nutrient rich waters</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="text-blue-500 font-bold">4.</span>
+                <span>Bay of Bengal freshwater plume extends 200km offshore</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="text-blue-500 font-bold">5.</span>
+                <span>Oxygen levels optimal for marine life above 150m depth</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="text-green-500 font-bold">6.</span>
+                <span>Chlorophyll concentration peaks at 60-80m (photic zone)</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="text-green-500 font-bold">7.</span>
+                <span>Mixed layer depth averaging 45m in equatorial regions</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="text-green-500 font-bold">8.</span>
+                <span>Thermocline depth stable at 200-250m across Indian Ocean</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="text-green-500 font-bold">9.</span>
+                <span>Seasonal monsoon currents detected at 10°N-20°N band</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="text-green-500 font-bold">10.</span>
+                <span>Deep water masses showing 0.02°C warming trend</span>
+              </li>
+                </ul>
+              </CardContent>
+            </Card>
+          )}
         </div>
         
-        <div className="flex items-center space-x-2">
-          <Calendar className="w-4 h-4 text-muted-foreground" />
-          <select 
-            value={timeRange}
-            onChange={(e) => setTimeRange(e.target.value)}
-            className="px-3 py-2 border border-border rounded-md bg-white"
+        <div className="w-full">
+          <button
+            onClick={() => setShowAdvisories(!showAdvisories)}
+            className="w-full flex items-center justify-between p-4 bg-red-50 hover:bg-red-100 rounded-lg border border-red-300 transition-colors"
           >
-            <option value="Last Week">Last Week</option>
-            <option value="Last Month">Last Month</option>
-            <option value="Last 3 Months">Last 3 Months</option>
-            <option value="All Time">All Time</option>
-          </select>
+            <div className="flex items-center gap-2">
+              <span className="text-red-500">⚠️</span>
+              <span className="font-semibold text-red-900">Critical Advisories</span>
+            </div>
+            <ChevronDown className={`w-5 h-5 text-red-600 transition-transform ${showAdvisories ? 'rotate-180' : ''}`} />
+          </button>
+          {showAdvisories && (
+            <Card className="mt-2 border-l-4 border-l-red-500">
+              <CardContent className="pt-4">
+                <ul className="space-y-2 text-sm">
+              <li className="flex items-start gap-2">
+                <span className="text-red-500 font-bold">!</span>
+                <div>
+                  <span className="font-semibold text-red-600">Hypoxic Zone Alert:</span>
+                  <span className="block text-xs mt-1">15°S-18°S, 200-400m depth - Oxygen &lt;2mg/L, avoid fishing operations</span>
+                </div>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="text-orange-500 font-bold">!</span>
+                <div>
+                  <span className="font-semibold text-orange-600">Strong Currents:</span>
+                  <span className="block text-xs mt-1">Somali Current reaching 2.5 m/s - navigation hazard for small vessels</span>
+                </div>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="text-yellow-500 font-bold">!</span>
+                <div>
+                  <span className="font-semibold text-yellow-600">Algal Bloom Risk:</span>
+                  <span className="block text-xs mt-1">Arabian Sea coastal waters - high chlorophyll, potential HAB formation</span>
+                </div>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="text-orange-500 font-bold">!</span>
+                <div>
+                  <span className="font-semibold text-orange-600">Thermal Stratification:</span>
+                  <span className="block text-xs mt-1">Bay of Bengal - strong stratification limiting vertical mixing</span>
+                </div>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="text-red-500 font-bold">!</span>
+                <div>
+                  <span className="font-semibold text-red-600">Cyclonic Activity:</span>
+                  <span className="block text-xs mt-1">Low pressure system developing at 12°N, 85°E - monitor for intensification</span>
+                </div>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="text-yellow-500 font-bold">!</span>
+                <div>
+                  <span className="font-semibold text-yellow-600">Salinity Anomaly:</span>
+                  <span className="block text-xs mt-1">Red Sea northern basin - salinity &gt;41 PSU affecting ecosystem</span>
+                </div>
+              </li>
+                </ul>
+              </CardContent>
+            </Card>
+          )}
+        </div>
+      </div>
+
+      {/* Region and Time Controls */}
+      <div className="flex flex-col md:flex-row items-center justify-between gap-4 mb-6 p-4 bg-white rounded-lg border border-gray-200">
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex items-center space-x-2 min-w-[180px]">
+            <Globe className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+            <select 
+              value={selectedRegion}
+              onChange={(e) => setSelectedRegion(e.target.value)}
+              className="px-3 py-2 border border-border rounded-md bg-white w-full"
+              disabled={isLoading}
+            >
+              <option value="All">All Regions</option>
+              <option value="Arabian Sea">Arabian Sea</option>
+              <option value="Bay of Bengal">Bay of Bengal</option>
+              <option value="Indian Ocean">Indian Ocean</option>
+              <option value="South China Sea">South China Sea</option>
+            </select>
+          </div>
+          
+          <div className="flex items-center space-x-2 min-w-[180px]">
+            <Calendar className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+            <select 
+              value={timeRange}
+              onChange={(e) => setTimeRange(e.target.value)}
+              className="px-3 py-2 border border-border rounded-md bg-white w-full"
+              disabled={isLoading}
+            >
+              <option value="Last Week">Last Week</option>
+              <option value="Last Month">Last Month</option>
+              <option value="Last 3 Months">Last 3 Months</option>
+              <option value="All Time">All Time</option>
+            </select>
+          </div>
         </div>
 
-        <div className="flex items-center space-x-2 ml-auto">
-          <Button variant="outline" size="sm" className="flex items-center space-x-2">
-            <RefreshCw className="w-4 h-4" />
-            <span>Refresh</span>
+        <div className="flex items-center space-x-2">
+          <Button 
+            variant="outline" 
+            size="sm" 
+            className="flex items-center space-x-2"
+            onClick={handleRefresh}
+            disabled={isLoading || isRefreshing}
+          >
+            <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+            <span>{isRefreshing ? 'Refreshing...' : 'Refresh'}</span>
           </Button>
           <Button 
             variant="outline" 
             size="sm" 
             className="flex items-center space-x-2"
             onClick={handleExport}
+            disabled={isLoading || isRefreshing}
           >
             <Download className="w-4 h-4" />
             <span>Export PDF</span>
@@ -660,8 +769,13 @@ const ArgoDataGraphs: React.FC = () => {
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-muted-foreground">Total Profiles</p>
-                <p className="text-2xl font-bold text-primary-deep">{filteredData.length}</p>
+                <div className="flex items-center space-x-2 mb-1">
+                  <p className="text-sm text-muted-foreground">Total Profiles</p>
+                  {isLoading && <div className="w-3 h-3 border-2 border-gray-300 border-t-blue-500 rounded-full animate-spin"></div>}
+                </div>
+                <p className="text-2xl font-bold text-primary-deep">
+                  {filteredData.length.toLocaleString()}
+                </p>
                 <p className="text-xs text-green-600">
                   {filteredData.filter(item => item.isRecent).length} live updates
                 </p>
@@ -675,12 +789,12 @@ const ArgoDataGraphs: React.FC = () => {
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-muted-foreground">Avg Temperature</p>
+                <p className="text-sm text-muted-foreground">Data Coverage</p>
                 <p className="text-2xl font-bold text-chart-temperature">
-                  {(filteredData.reduce((acc, item) => acc + item.temperature, 0) / filteredData.length).toFixed(1)}°C
+                  {selectedRegion === 'All' ? 'Global' : selectedRegion}
                 </p>
                 <p className="text-xs text-muted-foreground">
-                  Range: {Math.min(...filteredData.map(item => item.temperature)).toFixed(1)}° - {Math.max(...filteredData.map(item => item.temperature)).toFixed(1)}°C
+                  {totalFloats.toLocaleString()} active sensors
                 </p>
               </div>
               <Thermometer className="w-8 h-8 text-chart-temperature" />
@@ -692,12 +806,16 @@ const ArgoDataGraphs: React.FC = () => {
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-muted-foreground">Avg Salinity</p>
+                <p className="text-sm text-muted-foreground">Avg Temperature</p>
                 <p className="text-2xl font-bold text-chart-salinity">
-                  {(filteredData.reduce((acc, item) => acc + item.salinity, 0) / filteredData.length).toFixed(1)} PSU
+                  {filteredData.length > 0 
+                    ? (filteredData.reduce((acc, item) => acc + (item.temperature || 0), 0) / filteredData.length).toFixed(1)
+                    : '--'}°C
                 </p>
                 <p className="text-xs text-muted-foreground">
-                  Global ocean range
+                  {filteredData.length > 0 
+                    ? `Range: ${Math.min(...filteredData.map(item => item.temperature || 0)).toFixed(1)}° - ${Math.max(...filteredData.map(item => item.temperature || 0)).toFixed(1)}°C`
+                    : 'No data'}
                 </p>
               </div>
               <Droplets className="w-8 h-8 text-chart-salinity" />
@@ -709,12 +827,9 @@ const ArgoDataGraphs: React.FC = () => {
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-muted-foreground">Ocean Regions</p>
+                <p className="text-sm text-muted-foreground">Last Updated</p>
                 <p className="text-2xl font-bold text-chart-depth">
-                  {new Set(filteredData.map(item => item.region)).size}
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  Max depth: {Math.max(...filteredData.map(item => item.depth))}m
+                  {lastUpdated ? new Date(lastUpdated).toLocaleTimeString() : '--:--'}
                 </p>
               </div>
               <Waves className="w-8 h-8 text-chart-depth" />
@@ -745,12 +860,72 @@ const ArgoDataGraphs: React.FC = () => {
               </CardHeader>
               <CardContent>
                 <ResponsiveContainer width="100%" height={300}>
-                  <ScatterChart data={filteredData.slice(0, 100)}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="temperature" name="Temperature" unit="°C" />
-                    <YAxis dataKey="salinity" name="Salinity" unit=" PSU" />
-                    <Tooltip cursor={{ strokeDasharray: '3 3' }} content={<CustomTooltip />} />
-                    <Scatter dataKey="salinity" fill="#3b82f6" />
+                  <ScatterChart
+                    data={filteredData
+                      .filter(d => d.temperature != null && d.salinity != null)
+                      .slice(0, 200)
+                    }
+                    margin={{ top: 10, right: 10, bottom: 10, left: 10 }}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f4f8" />
+                    <XAxis 
+                      dataKey="temperature" 
+                      name="Temperature" 
+                      unit="°C"
+                      domain={['auto', 'auto']}
+                      tick={{ fill: '#4b5563' }}
+                      tickLine={{ stroke: '#cbd5e1' }}
+                      axisLine={{ stroke: '#cbd5e1' }}
+                    />
+                    <YAxis 
+                      dataKey="salinity" 
+                      name="Salinity" 
+                      unit=" PSU"
+                      domain={['auto', 'auto']}
+                      tick={{ fill: '#4b5563' }}
+                      tickLine={{ stroke: '#cbd5e1' }}
+                      axisLine={{ stroke: '#cbd5e1' }}
+                    />
+                    <ZAxis dataKey="depth" range={[100, 400]} name="Depth" />
+                    <Tooltip 
+                      cursor={{ strokeDasharray: '3 3', stroke: '#94a3b8' }} 
+                      contentStyle={{
+                        backgroundColor: 'rgba(255, 255, 255, 0.95)',
+                        border: '1px solid #e2e8f0',
+                        borderRadius: '0.5rem',
+                        boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)'
+                      }}
+                      content={<CustomTooltip />} 
+                    />
+                    <Scatter 
+                      name="Temperature vs Salinity"
+                      data={filteredData
+                        .filter(d => d.temperature != null && d.salinity != null)
+                        .slice(0, 200)
+                      }
+                      fill="#3b82f6"
+                      fillOpacity={0.7}
+                    >
+                      {filteredData
+                        .filter(d => d.temperature != null && d.salinity != null)
+                        .slice(0, 200)
+                        .map((entry, index) => (
+                          <Cell 
+                            key={`cell-${index}`}
+                            fill={entry.isRecent ? '#10b981' : '#3b82f6'}
+                            stroke={entry.isRecent ? '#059669' : '#2563eb'}
+                            strokeWidth={entry.isRecent ? 1.5 : 0.5}
+                          />
+                        ))
+                      }
+                    </Scatter>
+                    <Legend 
+                      verticalAlign="top"
+                      height={36}
+                      formatter={(value, entry, index) => {
+                        return <span style={{ color: '#4b5563' }}>{value}</span>;
+                      }}
+                    />
                   </ScatterChart>
                 </ResponsiveContainer>
               </CardContent>
@@ -978,4 +1153,5 @@ const ArgoDataGraphs: React.FC = () => {
   );
 };
 
+// Export the component as default
 export default ArgoDataGraphs;

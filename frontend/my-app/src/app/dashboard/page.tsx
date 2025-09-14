@@ -25,10 +25,12 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 import { SignedIn, SignedOut, RedirectToSignIn } from '@clerk/nextjs';
+import { useRouter } from 'next/navigation';
 
 export default function Dashboard() {
   const [selectedRegion, setSelectedRegion] = useState("Indian Ocean");
   const [timeRange, setTimeRange] = useState("7 days");
+  const router = useRouter();
 
   const stats = [
     {
@@ -37,7 +39,8 @@ export default function Dashboard() {
       change: "+2.3%",
       trend: "up",
       icon: Globe,
-      color: "text-chart-temperature"
+      color: "text-chart-temperature",
+      insight: "Highest concentration in Arabian Sea"
     },
     {
       title: "Profiles Today",
@@ -45,7 +48,8 @@ export default function Dashboard() {
       change: "+5.1%",
       trend: "up",
       icon: Database,
-      color: "text-chart-salinity"
+      color: "text-chart-salinity",
+      insight: "Peak data collection at 06:00 UTC"
     },
     {
       title: "Data Quality",
@@ -53,7 +57,8 @@ export default function Dashboard() {
       change: "+0.1%",
       trend: "up",
       icon: Activity,
-      color: "text-chart-depth"
+      color: "text-chart-depth",
+      insight: "All sensors operating normally"
     },
     {
       title: "Coverage",
@@ -61,7 +66,8 @@ export default function Dashboard() {
       change: "-1.2%",
       trend: "down",
       icon: MapPin,
-      color: "text-chart-bgc"
+      color: "text-chart-bgc",
+      insight: "Gap detected in Southern Indian Ocean"
     }
   ];
 
@@ -177,10 +183,72 @@ export default function Dashboard() {
                     </span>
                     <span className="text-sm text-muted-foreground">from last week</span>
                   </div>
+                  {stat.insight && (
+                    <p className="text-xs text-muted-foreground mt-2 italic">{stat.insight}</p>
+                  )}
                 </div>
               </Card>
             );
           })}
+        </div>
+
+        {/* Key Insights Section */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+          <Card className="border-l-4 border-l-blue-500">
+            <div className="p-6">
+              <h3 className="text-lg font-semibold text-primary-deep mb-4 flex items-center gap-2">
+                <span className="text-blue-500">🌊</span> Ocean Health Indicators
+              </h3>
+              <ul className="space-y-3 text-sm">
+                <li className="flex items-start gap-2">
+                  <span className="text-green-500 mt-1">•</span>
+                  <div>
+                    <span className="font-medium">Arabian Sea:</span> Optimal oxygen levels (&gt;5 mg/L) at 200m depth
+                  </div>
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="text-yellow-500 mt-1">•</span>
+                  <div>
+                    <span className="font-medium">Bay of Bengal:</span> Temperature anomaly detected (+1.8°C above average)
+                  </div>
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="text-blue-500 mt-1">•</span>
+                  <div>
+                    <span className="font-medium">Indian Ocean:</span> Strong monsoon currents affecting upper layers
+                  </div>
+                </li>
+              </ul>
+            </div>
+          </Card>
+
+          <Card className="border-l-4 border-l-orange-500">
+            <div className="p-6">
+              <h3 className="text-lg font-semibold text-primary-deep mb-4 flex items-center gap-2">
+                <span className="text-orange-500">⚠️</span> Advisory Notices
+              </h3>
+              <ul className="space-y-3 text-sm">
+                <li className="flex items-start gap-2">
+                  <span className="text-red-500 mt-1">•</span>
+                  <div>
+                    <span className="font-medium">South China Sea:</span> Avoid fishing zones 15°N-18°N due to low oxygen
+                  </div>
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="text-orange-500 mt-1">•</span>
+                  <div>
+                    <span className="font-medium">Red Sea:</span> High salinity levels (&gt;40 PSU) affecting marine life
+                  </div>
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="text-yellow-500 mt-1">•</span>
+                  <div>
+                    <span className="font-medium">Arabian Gulf:</span> Algal bloom detected, navigation caution advised
+                  </div>
+                </li>
+              </ul>
+            </div>
+          </Card>
         </div>
 
         {/* Main Content Grid */}
@@ -323,7 +391,11 @@ export default function Dashboard() {
               <p className="text-sm text-muted-foreground mb-4">
                 Advanced data analysis and visualization tools
               </p>
-              <Button variant="outline" size="sm">
+              <Button 
+                variant="outline" 
+                size="sm"
+                onClick={() => router.push('/explorer')}
+              >
                 View Analytics
               </Button>
             </div>
@@ -338,7 +410,11 @@ export default function Dashboard() {
               <p className="text-sm text-muted-foreground mb-4">
                 Interactive maps with real-time float locations
               </p>
-              <Button variant="outline" size="sm">
+              <Button 
+                variant="outline" 
+                size="sm"
+                onClick={() => router.push('/map')}
+              >
                 Open Map
               </Button>
             </div>
@@ -353,7 +429,11 @@ export default function Dashboard() {
               <p className="text-sm text-muted-foreground mb-4">
                 Long-term trends and pattern analysis
               </p>
-              <Button variant="outline" size="sm">
+              <Button 
+                variant="outline" 
+                size="sm"
+                onClick={() => router.push('/explorer')}
+              >
                 View Trends
               </Button>
             </div>
