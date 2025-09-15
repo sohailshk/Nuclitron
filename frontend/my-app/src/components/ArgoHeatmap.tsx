@@ -1,322 +1,548 @@
 'use client';
 
-import React, { useState, useRef, useMemo } from 'react';
-import { GoogleMap, LoadScript, HeatmapLayer, Autocomplete } from '@react-google-maps/api';
+import React, { useState, useEffect, useRef } from 'react';
+import L from 'leaflet';
+import 'leaflet/dist/leaflet.css';
+import { GeoSearchControl, OpenStreetMapProvider } from 'leaflet-geosearch';
+import 'leaflet-geosearch/assets/css/leaflet.css';
 
-const libraries = ['places', 'visualization'] as const;
+// Correct way to import leaflet.heat
+import 'leaflet.heat';
 
-const mapContainerStyle = {
-  width: '100%',
-  height: '100%',
-  minHeight: '400px',
-};
+import { argoApiService, ArgoDataPoint } from '@/services/argoApi';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Thermometer, Droplets, Gauge, RefreshCw, Eye, EyeOff } from 'lucide-react';
 
 interface HeatmapDataPoint {
-  location: google.maps.LatLng;
-  weight: number;
-}
-
-interface RawHeatmapData {
   lat: number;
   lng: number;
   weight: number;
 }
 
-// Full rawHeatmapData array (200 synthetic ARGO points for Indian Ocean)
-const rawHeatmapData: RawHeatmapData[] = [
-  { lat: -5.648722, lng: 23.151355, weight: 0.40 },
-  { lat: -41.027087, lng: 112.795373, weight: 0.73 },
-  { lat: 15.835263, lng: 30.954293, weight: 0.52 },
-  { lat: -57.467236, lng: 47.548385, weight: 0.59 },
-  { lat: -57.744443, lng: 45.053544, weight: 0.71 },
-  { lat: -13.679974, lng: 47.775518, weight: 0.66 },
-  { lat: 8.801589, lng: 20.818844, weight: 0.84 },
-  { lat: -0.658151, lng: 62.871565, weight: 0.30 },
-  { lat: 21.363111, lng: 62.410913, weight: 0.24 },
-  { lat: -51.779108, lng: 126.784290, weight: 0.67 },
-  { lat: 8.605903, lng: 111.946205, weight: 0.61 },
-  { lat: 22.714840, lng: 67.695332, weight: 0.63 },
-  { lat: 10.499396, lng: 97.933489, weight: 0.88 },
-  { lat: -10.925068, lng: 108.776051, weight: 0.20 },
-  { lat: -40.628647, lng: 56.462883, weight: 0.23 },
-  { lat: -40.212775, lng: 32.726180, weight: 0.40 },
-  { lat: -5.966822, lng: 65.968855, weight: 0.48 },
-  { lat: -42.191902, lng: 53.639206, weight: 0.95 },
-  { lat: -4.916992, lng: 96.750507, weight: 0.31 },
-  { lat: 1.975778, lng: 40.588714, weight: 0.48 },
-  { lat: 24.109485, lng: 100.639970, weight: 0.63 },
-  { lat: -1.807789, lng: 126.199342, weight: 0.81 },
-  { lat: -40.530914, lng: 24.044631, weight: 0.43 },
-  { lat: -37.242026, lng: 46.583838, weight: 0.95 },
-  { lat: 14.491248, lng: 59.649413, weight: 0.71 },
-  { lat: -26.371288, lng: 135.232996, weight: 0.55 },
-  { lat: -37.485186, lng: 51.075066, weight: 0.63 },
-  { lat: -37.666963, lng: 93.657835, weight: 0.91 },
-  { lat: -26.050957, lng: 47.634416, weight: 1.00 },
-  { lat: -16.690265, lng: 31.454586, weight: 0.21 },
-  { lat: -50.679824, lng: 99.058201, weight: 0.83 },
-  { lat: -24.116403, lng: 28.004491, weight: 0.48 },
-  { lat: 24.670317, lng: 86.668407, weight: 0.98 },
-  { lat: 13.166275, lng: 21.446609, weight: 0.77 },
-  { lat: -2.054619, lng: 87.658262, weight: 0.39 },
-  { lat: -5.518247, lng: 34.055574, weight: 0.53 },
-  { lat: -21.433485, lng: 140.180807, weight: 0.90 },
-  { lat: -37.611931, lng: 83.073850, weight: 0.32 },
-  { lat: 17.573366, lng: 129.685340, weight: 0.42 },
-  { lat: -5.689293, lng: 96.730247, weight: 0.29 },
-  { lat: 4.813418, lng: 87.961758, weight: 0.82 },
-  { lat: -14.919938, lng: 20.072059, weight: 0.44 },
-  { lat: -58.344477, lng: 137.066426, weight: 0.90 },
-  { lat: 10.691570, lng: 58.746780, weight: 0.21 },
-  { lat: 14.630816, lng: 139.315630, weight: 0.24 },
-  { lat: -18.690811, lng: 28.720777, weight: 0.80 },
-  { lat: 5.095926, lng: 36.177325, weight: 0.56 },
-  { lat: -13.266695, lng: 53.397135, weight: 0.89 },
-  { lat: -24.033275, lng: 46.686574, weight: 0.62 },
-  { lat: 2.044141, lng: 45.345034, weight: 0.43 },
-  { lat: 24.587695, lng: 101.884635, weight: 0.53 },
-  { lat: -16.006054, lng: 35.246529, weight: 0.35 },
-  { lat: -31.262727, lng: 94.126899, weight: 0.36 },
-  { lat: -41.281522, lng: 28.945129, weight: 0.69 },
-  { lat: -40.539948, lng: 134.082922, weight: 0.88 },
-  { lat: -53.977125, lng: 49.988584, weight: 0.72 },
-  { lat: -41.789871, lng: 36.671293, weight: 0.95 },
-  { lat: -11.461337, lng: 79.556549, weight: 0.82 },
-  { lat: 8.637245, lng: 43.991649, weight: 0.25 },
-  { lat: -23.360649, lng: 73.370907, weight: 0.56 },
-  { lat: 1.971447, lng: 104.843933, weight: 0.99 },
-  { lat: -51.634481, lng: 70.730282, weight: 0.45 },
-  { lat: 13.242166, lng: 51.330698, weight: 0.33 },
-  { lat: -21.867848, lng: 73.157087, weight: 0.40 },
-  { lat: -38.766452, lng: 136.331466, weight: 0.54 },
-  { lat: 13.214674, lng: 89.340989, weight: 0.21 },
-  { lat: 24.939010, lng: 125.339476, weight: 0.97 },
-  { lat: 18.741194, lng: 126.935663, weight: 0.31 },
-  { lat: -18.720504, lng: 46.932160, weight: 0.50 },
-  { lat: -55.015991, lng: 67.750613, weight: 0.99 },
-  { lat: -37.457740, lng: 118.792896, weight: 0.55 },
-  { lat: -24.044364, lng: 140.622023, weight: 0.55 },
-  { lat: -12.759693, lng: 110.519443, weight: 0.30 },
-  { lat: -34.779835, lng: 142.057380, weight: 0.65 },
-  { lat: -13.913408, lng: 114.244921, weight: 0.21 },
-  { lat: -10.344904, lng: 83.359148, weight: 0.88 },
-  { lat: -46.618218, lng: 141.058142, weight: 0.23 },
-  { lat: -44.204878, lng: 94.974423, weight: 0.73 },
-  { lat: -40.007669, lng: 35.105713, weight: 0.91 },
-  { lat: -39.071695, lng: 94.909413, weight: 0.68 },
-  { lat: -24.365882, lng: 93.542708, weight: 0.60 },
-  { lat: 19.450032, lng: 45.736659, weight: 0.76 },
-  { lat: -39.711694, lng: 69.869017, weight: 0.73 },
-  { lat: -34.500248, lng: 59.838327, weight: 0.79 },
-  { lat: -53.833835, lng: 77.743976, weight: 1.00 },
-  { lat: 24.668198, lng: 29.230851, weight: 0.34 },
-  { lat: -37.457965, lng: 137.590682, weight: 0.90 },
-  { lat: 14.737971, lng: 66.560413, weight: 0.30 },
-  { lat: 10.868321, lng: 108.646031, weight: 0.68 },
-  { lat: 23.914810, lng: 102.401016, weight: 0.17 },
-  { lat: 9.453851, lng: 57.721723, weight: 0.72 },
-  { lat: 19.809050, lng: 36.920680, weight: 0.26 },
-  { lat: -50.901942, lng: 89.706179, weight: 0.39 },
-  { lat: -8.589465, lng: 110.419136, weight: 0.34 },
-  { lat: -6.089773, lng: 53.261972, weight: 0.57 },
-  { lat: 16.953602, lng: 126.609068, weight: 0.24 },
-  { lat: -23.996059, lng: 54.861708, weight: 0.17 },
-  { lat: 5.545134, lng: 100.276286, weight: 0.38 },
-  { lat: 3.004627, lng: 89.511733, weight: 0.52 },
-  { lat: -59.178076, lng: 29.480726, weight: 0.90 },
-  { lat: 16.833929, lng: 88.744376, weight: 0.86 },
-  { lat: -10.486687, lng: 38.659817, weight: 0.27 },
-  { lat: -33.798040, lng: 133.271668, weight: 0.83 },
-  { lat: 13.159719, lng: 133.264504, weight: 0.34 },
-  { lat: -38.789972, lng: 32.951996, weight: 0.82 },
-  { lat: 15.151450, lng: 71.203551, weight: 0.68 },
-  { lat: -46.862966, lng: 137.165008, weight: 0.89 },
-  { lat: 22.977513, lng: 122.157237, weight: 0.90 },
-  { lat: -57.893159, lng: 112.807123, weight: 0.44 },
-  { lat: 19.119350, lng: 121.081628, weight: 0.89 },
-  { lat: 8.913692, lng: 53.617519, weight: 0.82 },
-  { lat: -50.811872, lng: 129.893015, weight: 0.88 },
-  { lat: -41.093134, lng: 122.889912, weight: 0.55 },
-  { lat: -34.058776, lng: 120.213533, weight: 0.36 },
-  { lat: -57.988523, lng: 44.334353, weight: 0.44 },
-  { lat: 13.470000, lng: 141.828027, weight: 0.40 },
-  { lat: -5.474052, lng: 70.359476, weight: 0.98 },
-  { lat: -14.421663, lng: 138.343880, weight: 0.26 },
-  { lat: 22.484052, lng: 42.499545, weight: 0.97 },
-  { lat: -37.435359, lng: 33.658721, weight: 0.53 },
-  { lat: 1.926330, lng: 59.523342, weight: 0.67 },
-  { lat: -16.529040, lng: 68.534625, weight: 0.65 },
-  { lat: -38.348587, lng: 109.306946, weight: 0.17 },
-  { lat: 18.673889, lng: 87.844952, weight: 0.77 },
-  { lat: 3.065757, lng: 104.499192, weight: 0.47 },
-  { lat: -54.052226, lng: 103.693948, weight: 0.44 },
-  { lat: -33.317170, lng: 126.849925, weight: 0.77 },
-  { lat: -34.472607, lng: 58.969867, weight: 0.51 },
-  { lat: -25.795967, lng: 57.252556, weight: 0.27 },
-  { lat: -24.262062, lng: 138.485823, weight: 0.73 },
-  { lat: 16.738471, lng: 97.554879, weight: 0.42 },
-  { lat: -13.425337, lng: 20.051148, weight: 0.41 },
-  { lat: -23.459507, lng: 93.078082, weight: 0.71 },
-  { lat: -20.476004, lng: 75.712135, weight: 0.34 },
-  { lat: -19.779174, lng: 133.548784, weight: 0.83 },
-  { lat: -45.576231, lng: 30.684238, weight: 0.60 },
-  { lat: -6.200027, lng: 62.233720, weight: 0.85 },
-  { lat: 3.846742, lng: 104.772254, weight: 0.35 },
-  { lat: -43.073956, lng: 23.077599, weight: 0.37 },
-  { lat: -19.613411, lng: 127.066950, weight: 0.23 },
-  { lat: -24.772514, lng: 99.350438, weight: 0.33 },
-  { lat: -0.809889, lng: 82.291523, weight: 0.37 },
-  { lat: -4.235069, lng: 20.698647, weight: 0.79 },
-  { lat: 5.453926, lng: 33.429999, weight: 0.52 },
-  { lat: -45.049632, lng: 140.703721, weight: 0.60 },
-  { lat: -55.731437, lng: 51.398983, weight: 0.87 },
-  { lat: -21.200745, lng: 120.978492, weight: 0.72 },
-  { lat: 23.970859, lng: 95.026992, weight: 0.96 },
-  { lat: 15.771204, lng: 97.194193, weight: 0.77 },
-  { lat: -17.093856, lng: 124.651715, weight: 0.62 },
-  { lat: 16.262689, lng: 113.700586, weight: 0.56 },
-  { lat: -37.968718, lng: 51.152207, weight: 0.70 },
-  { lat: 5.094163, lng: 85.683776, weight: 0.69 },
-  { lat: -36.659217, lng: 29.762903, weight: 0.40 },
-  { lat: -36.904216, lng: 60.283406, weight: 0.62 },
-  { lat: -48.238205, lng: 49.138946, weight: 0.74 },
-  { lat: 0.045627, lng: 28.092835, weight: 0.51 },
-  { lat: -13.878053, lng: 72.387553, weight: 0.34 },
-  { lat: -24.287801, lng: 134.009648, weight: 0.65 },
-  { lat: -0.880546, lng: 127.948236, weight: 0.80 },
-  { lat: -27.667613, lng: 20.742907, weight: 0.46 },
-  { lat: 4.045386, lng: 127.534442, weight: 0.96 },
-  { lat: -24.383191, lng: 114.186974, weight: 0.62 },
-  { lat: -8.723530, lng: 47.787875, weight: 0.35 },
-  { lat: -22.953942, lng: 23.657127, weight: 0.45 },
-  { lat: -2.272940, lng: 70.943900, weight: 0.30 },
-  { lat: -20.271837, lng: 36.081102, weight: 0.69 },
-  { lat: -57.707852, lng: 69.646552, weight: 0.64 },
-  { lat: -57.696326, lng: 100.986456, weight: 0.28 },
-  { lat: -20.755632, lng: 26.335864, weight: 0.48 },
-  { lat: -42.008876, lng: 61.182571, weight: 0.80 },
-  { lat: -27.774272, lng: 114.753238, weight: 0.86 },
-  { lat: -38.556920, lng: 30.320185, weight: 0.18 },
-  { lat: -14.149381, lng: 145.988386, weight: 0.46 },
-  { lat: -4.737752, lng: 118.435364, weight: 0.71 },
-  { lat: 4.109822, lng: 139.651078, weight: 0.33 },
-  { lat: -58.267699, lng: 39.200176, weight: 0.27 },
-  { lat: -3.095998, lng: 91.060167, weight: 0.35 },
-  { lat: -0.545477, lng: 116.629160, weight: 0.31 },
-  { lat: -8.383963, lng: 114.238632, weight: 0.26 },
-  { lat: 9.640600, lng: 141.554817, weight: 0.26 },
-  { lat: -57.817334, lng: 59.306613, weight: 0.73 },
-  { lat: 21.444691, lng: 69.978460, weight: 0.76 },
-  { lat: -53.540299, lng: 107.017416, weight: 0.69 },
-  { lat: -51.338389, lng: 117.332592, weight: 0.88 },
-  { lat: -8.965013, lng: 35.252938, weight: 0.99 },
-  { lat: 6.524004, lng: 63.747674, weight: 0.52 },
-  { lat: -28.501476, lng: 83.751059, weight: 0.45 },
-  { lat: 12.213928, lng: 123.613696, weight: 0.25 },
-  { lat: 21.666943, lng: 100.083723, weight: 0.86 },
-  { lat: 0.121235, lng: 74.871380, weight: 0.78 },
-  { lat: 22.065267, lng: 54.030382, weight: 0.84 },
-  { lat: -14.255303, lng: 80.920685, weight: 0.53 },
-  { lat: 2.137228, lng: 53.817838, weight: 0.88 },
-  { lat: 10.612137, lng: 30.919525, weight: 0.90 },
-  { lat: -39.271608, lng: 78.553267, weight: 0.68 },
-  { lat: -27.785909, lng: 23.616200, weight: 0.88 },
-  { lat: -44.543612, lng: 46.727101, weight: 0.83 },
-  { lat: -31.071198, lng: 130.920317, weight: 0.75 },
-  { lat: -36.517171, lng: 21.279040, weight: 0.96 },
-];
+interface ArgoHeatmapProps {
+  selectedRegion?: string;
+  selectedParameter?: string;
+}
 
-const ArgoHeatmap: React.FC = () => {
-  const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || ''; // Fallback to empty string if undefined
+// Add typings for heatLayer
+declare global {
+  namespace L {
+    function heatLayer(latlngs: any[], options?: any): any;
+  }
+}
 
-  const [showHeatmap, setShowHeatmap] = useState<boolean>(true);
-  const mapRef = useRef<google.maps.Map | null>(null);
-  const autocompleteRef = useRef<google.maps.places.Autocomplete | null>(null);
+// Convert ARGO data to heatmap format with validation
+const convertArgoDataToHeatmap = (data: ArgoDataPoint[], parameter: string): HeatmapDataPoint[] => {
+  return data
+    .filter(point => {
+      // Validate coordinates and data
+      return point && 
+        typeof point.latitude === 'number' && 
+        typeof point.longitude === 'number' &&
+        !isNaN(point.latitude) && 
+        !isNaN(point.longitude) &&
+        point.latitude >= -90 && point.latitude <= 90 &&
+        point.longitude >= -180 && point.longitude <= 180;
+    })
+    .map(point => {
+      let weight = 0.5;
 
-  const heatmapData = useMemo(() => {
-    if (typeof google === 'undefined') return [];
-    return rawHeatmapData.map(({ lat, lng, weight }) => ({
-      location: new google.maps.LatLng(lat, lng),
-      weight,
-    }));
+      try {
+        switch (parameter) {
+          case 'temperature':
+            if (typeof point.temperature === 'number' && !isNaN(point.temperature)) {
+              weight = Math.min(Math.max(point.temperature / 30, 0), 1);
+            }
+            break;
+          case 'salinity':
+            if (typeof point.salinity === 'number' && !isNaN(point.salinity)) {
+              weight = Math.min(Math.max((point.salinity - 30) / 10, 0), 1);
+            }
+            break;
+          case 'depth':
+            if (typeof point.depth === 'number' && !isNaN(point.depth)) {
+              weight = Math.min(Math.max(point.depth / 2000, 0), 1);
+            }
+            break;
+          default:
+            weight = point.isRecent ? 0.8 : 0.5;
+        }
+      } catch (error) {
+        console.warn('Error calculating weight for point:', error);
+        weight = 0.5;
+      }
+
+      return {
+        lat: point.latitude,
+        lng: point.longitude,
+        weight: Math.min(Math.max(weight, 0), 1) // Ensure weight is between 0 and 1
+      };
+    });
+};
+
+const ArgoHeatmap: React.FC<ArgoHeatmapProps> = ({
+  selectedRegion = 'Indian Ocean',
+  selectedParameter = 'temperature'
+}) => {
+  const mapRef = useRef<L.Map | null>(null);
+  const heatmapRef = useRef<L.HeatLayer | null>(null);
+  const markersRef = useRef<L.LayerGroup | null>(null);
+  const [showHeatmap, setShowHeatmap] = useState(true);
+  const [showMarkers, setShowMarkers] = useState(true);
+  const [argoData, setArgoData] = useState<ArgoDataPoint[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [dataSource, setDataSource] = useState<'api' | 'mock'>('mock');
+  const searchControlRef = useRef<any>(null);
+
+  // Fetch ARGO data
+  useEffect(() => {
+    const fetchData = async () => {
+      setLoading(true);
+      try {
+        console.log(`🗺️ Fetching ARGO data for map: ${selectedRegion} (${selectedParameter})`);
+        const response = await argoApiService.fetchArgoData('Last Month', selectedRegion);
+        setArgoData(response.data);
+        setDataSource(response.dataSource);
+        console.log(`✅ Map loaded ${response.data.length} ARGO data points`);
+      } catch (error) {
+        console.error('Failed to fetch ARGO data for map:', error);
+        setArgoData([]);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchData();
+  }, [selectedRegion]);
+
+  // Initialize map
+  useEffect(() => {
+    if (!mapRef.current) {
+      const map = L.map('map', {
+        center: [-10, 80],
+        zoom: 4,
+        minZoom: 2,
+        maxZoom: 18,
+        zoomControl: true,
+        attributionControl: true,
+      });
+
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19,
+        attribution: '&copy; OpenStreetMap contributors | ARGO Data',
+      }).addTo(map);
+
+      const searchControl = new (GeoSearchControl as any)({
+        provider: new (OpenStreetMapProvider as any)(),
+        style: 'bar',
+        showMarker: true,
+        autoClose: true,
+        searchLabel: 'Search locations (e.g., Mumbai, Chennai)...',
+      });
+      map.addControl(searchControl);
+      searchControlRef.current = searchControl;
+
+      markersRef.current = L.layerGroup().addTo(map);
+
+      mapRef.current = map;
+    }
   }, []);
 
-  const onLoad = (map: google.maps.Map) => {
-    mapRef.current = map;
-  };
-
-  const onPlaceChanged = () => {
-    if (autocompleteRef.current) {
-      const place = autocompleteRef.current.getPlace();
-      if (place.geometry?.location && mapRef.current) {
-        mapRef.current.panTo(place.geometry.location);
-        mapRef.current.setZoom(10);
+  // Update heatmap and markers when data/parameter changes
+  useEffect(() => {
+    if (mapRef.current && argoData.length > 0) {
+      console.log(`🔄 Updating map layers for ${selectedParameter} with ${argoData.length} points`);
+      
+      // Update heatmap with error handling
+      if (heatmapRef.current) {
+        try {
+          mapRef.current.removeLayer(heatmapRef.current);
+        } catch (error) {
+          console.warn('⚠️ Error removing existing heatmap:', error);
+        }
+        heatmapRef.current = null;
       }
+
+      // Validate data before creating heatmap
+      if (argoData.length > 0 && argoData.length < 5000) { // Reduced limit to prevent memory issues
+        try {
+          const heatmapData = convertArgoDataToHeatmap(argoData, selectedParameter);
+          
+          // Additional validation and sampling if needed
+          let heatmapPoints = heatmapData.map(({ lat, lng, weight }) => [lat, lng, weight]);
+          
+          // If too many points, sample them to prevent memory issues
+          if (heatmapPoints.length > 2000) {
+            const sampleRate = 2000 / heatmapPoints.length;
+            heatmapPoints = heatmapPoints.filter(() => Math.random() < sampleRate);
+            console.log(`⚠️ Sampled heatmap points from ${heatmapData.length} to ${heatmapPoints.length}`);
+          }
+
+          if (heatmapPoints.length > 0) {
+            const gradient = selectedParameter === 'temperature'
+              ? {
+                  0.0: 'rgba(0, 0, 255, 0.6)',
+                  0.3: 'rgba(0, 255, 255, 0.7)',
+                  0.5: 'rgba(0, 255, 0, 0.8)',
+                  0.7: 'rgba(255, 255, 0, 0.9)',
+                  1.0: 'rgba(255, 0, 0, 1)'
+                }
+              : selectedParameter === 'salinity'
+              ? {
+                  0.0: 'rgba(0, 100, 255, 0.6)',
+                  0.5: 'rgba(0, 255, 200, 0.8)',
+                  1.0: 'rgba(255, 100, 0, 1)'
+                }
+              : {
+                  0.0: 'rgba(173, 216, 230, 0.6)',
+                  0.5: 'rgba(0, 100, 200, 0.8)',
+                  1.0: 'rgba(0, 0, 139, 1)'
+                };
+
+            // Create heatmap with very conservative settings to prevent memory issues
+            const heatmapOptions = {
+              radius: Math.min(20, Math.max(10, 25 - Math.floor(heatmapPoints.length / 50))), // Smaller dynamic radius
+              blur: 10, // Reduced blur
+              maxZoom: 12, // Further reduced maxZoom to prevent high-resolution rendering
+              gradient,
+              max: 0.8, // Reduced max intensity
+              minOpacity: 0.05
+            };
+            
+            console.log(`🎨 Creating heatmap with options:`, heatmapOptions);
+            heatmapRef.current = L.heatLayer(heatmapPoints, heatmapOptions);
+
+            if (showHeatmap && mapRef.current) {
+              try {
+                heatmapRef.current.addTo(mapRef.current);
+                console.log(`✅ Heatmap created with ${heatmapPoints.length} points`);
+              } catch (addError) {
+                console.error('❌ Failed to add heatmap to map:', addError);
+                heatmapRef.current = null;
+              }
+            }
+          } else {
+            console.warn('⚠️ No valid heatmap points after filtering');
+          }
+        } catch (heatmapError) {
+          console.error('❌ Failed to create heatmap:', heatmapError);
+          heatmapRef.current = null;
+        }
+      } else {
+        console.warn(`⚠️ Skipping heatmap creation: ${argoData.length} data points (max: 5000)`);
+        // Show markers instead when too many data points for heatmap
+        if (argoData.length >= 5000) {
+          console.log('📍 Too many points for heatmap, showing markers only');
+        }
+      }
+
+      // Update markers with parameter-specific styling
+      if (markersRef.current) {
+        markersRef.current.clearLayers();
+
+        if (showMarkers) {
+          console.log(`🎯 Adding ${argoData.length} markers for ${selectedParameter}`);
+          
+          argoData.forEach((point, index) => {
+            try {
+              // Parameter-specific marker colors
+              let markerColor = '#4444ff';
+              let markerSize = 6;
+              
+              if (selectedParameter === 'temperature') {
+                const tempNorm = Math.min(Math.max(point.temperature / 30, 0), 1);
+                markerColor = tempNorm > 0.7 ? '#ff4444' : tempNorm > 0.4 ? '#ffaa44' : '#4444ff';
+                markerSize = 5 + tempNorm * 4;
+              } else if (selectedParameter === 'salinity') {
+                const saltNorm = Math.min(Math.max((point.salinity - 30) / 10, 0), 1);
+                markerColor = saltNorm > 0.7 ? '#ff6600' : saltNorm > 0.4 ? '#00aaff' : '#0066ff';
+                markerSize = 5 + saltNorm * 4;
+              } else if (selectedParameter === 'depth') {
+                const depthNorm = Math.min(Math.max(point.depth / 2000, 0), 1);
+                markerColor = depthNorm > 0.7 ? '#000080' : depthNorm > 0.4 ? '#4169E1' : '#87CEEB';
+                markerSize = 5 + depthNorm * 4;
+              }
+              
+              // Recent data gets special styling
+              if (point.isRecent) {
+                markerColor = '#ff0000';
+                markerSize += 2;
+              }
+
+              const marker = L.circleMarker([point.latitude, point.longitude], {
+                radius: markerSize,
+                fillColor: markerColor,
+                color: '#ffffff',
+                weight: 2,
+                opacity: 1,
+                fillOpacity: 0.8
+              });
+
+              marker.bindPopup(`
+                <div style="padding: 12px; max-width: 300px; font-family: system-ui;">
+                  <h3 style="font-weight: bold; font-size: 16px; margin-bottom: 8px; color: #1f2937;">ARGO Float ${point.floatId}</h3>
+                  <p style="margin: 4px 0;"><strong>Location:</strong> ${point.latitude.toFixed(3)}°N, ${point.longitude.toFixed(3)}°E</p>
+                  <p style="margin: 4px 0;"><strong>Temperature:</strong> ${point.temperature}°C</p>
+                  <p style="margin: 4px 0;"><strong>Salinity:</strong> ${point.salinity} PSU</p>
+                  <p style="margin: 4px 0;"><strong>Depth:</strong> ${point.depth}m</p>
+                  <p style="margin: 4px 0;"><strong>Region:</strong> ${point.region}</p>
+                  <p style="font-size: 12px; color: #6b7280; margin-top: 8px;">${new Date(point.timestamp).toLocaleString()}</p>
+                  ${point.isRecent ? '<span style="background: #dcfce7; color: #166534; padding: 2px 8px; border-radius: 4px; font-size: 12px; display: inline-block; margin-top: 4px;">Recent Data</span>' : ''}
+                </div>
+              `);
+
+              markersRef.current?.addLayer(marker);
+            } catch (error) {
+              console.error(`❌ Failed to create marker ${index}:`, error);
+            }
+          });
+          
+          console.log(`✅ Successfully added ${argoData.length} markers`);
+        }
+      }
+      
+      // Force map refresh to prevent tile issues
+      setTimeout(() => {
+        if (mapRef.current) {
+          mapRef.current.invalidateSize(true);
+          // Force all tile layers to redraw
+          mapRef.current.eachLayer((layer: any) => {
+            if (layer._url && layer.redraw) {
+              layer.redraw();
+            }
+          });
+          console.log('🔄 Map tiles refreshed after marker update');
+        }
+      }, 100);
+      
+      // Additional refresh for stubborn tiles
+      setTimeout(() => {
+        if (mapRef.current) {
+          mapRef.current.invalidateSize(true);
+        }
+      }, 300);
+    }
+  }, [argoData, selectedParameter, showHeatmap, showMarkers]);
+
+  // Handle heatmap visibility toggle
+  useEffect(() => {
+    if (mapRef.current && heatmapRef.current) {
+      try {
+        if (showHeatmap) {
+          heatmapRef.current.addTo(mapRef.current);
+          console.log('✅ Heatmap shown');
+        } else {
+          mapRef.current.removeLayer(heatmapRef.current);
+          console.log('✅ Heatmap hidden');
+        }
+      } catch (error) {
+        console.error('❌ Error toggling heatmap visibility:', error);
+        // Reset heatmap reference if there's an error
+        heatmapRef.current = null;
+      }
+      
+      // Refresh map after heatmap toggle
+      setTimeout(() => {
+        if (mapRef.current) {
+          mapRef.current.invalidateSize(true);
+        }
+      }, 50);
+    }
+  }, [showHeatmap]);
+  
+  // Handle marker visibility toggle
+  useEffect(() => {
+    if (mapRef.current && markersRef.current) {
+      if (!showMarkers) {
+        markersRef.current.clearLayers();
+      } else if (argoData.length > 0) {
+        // Re-add markers when toggled on
+        markersRef.current.clearLayers();
+        
+        argoData.forEach((point, index) => {
+          try {
+            // Parameter-specific marker colors
+            let markerColor = '#4444ff';
+            let markerSize = 6;
+            
+            if (selectedParameter === 'temperature') {
+              const tempNorm = Math.min(Math.max(point.temperature / 30, 0), 1);
+              markerColor = tempNorm > 0.7 ? '#ff4444' : tempNorm > 0.4 ? '#ffaa44' : '#4444ff';
+              markerSize = 5 + tempNorm * 4;
+            } else if (selectedParameter === 'salinity') {
+              const saltNorm = Math.min(Math.max((point.salinity - 30) / 10, 0), 1);
+              markerColor = saltNorm > 0.7 ? '#ff6600' : saltNorm > 0.4 ? '#00aaff' : '#0066ff';
+              markerSize = 5 + saltNorm * 4;
+            } else if (selectedParameter === 'depth') {
+              const depthNorm = Math.min(Math.max(point.depth / 2000, 0), 1);
+              markerColor = depthNorm > 0.7 ? '#000080' : depthNorm > 0.4 ? '#4169E1' : '#87CEEB';
+              markerSize = 5 + depthNorm * 4;
+            }
+            
+            if (point.isRecent) {
+              markerColor = '#ff0000';
+              markerSize += 2;
+            }
+
+            const marker = L.circleMarker([point.latitude, point.longitude], {
+              radius: markerSize,
+              fillColor: markerColor,
+              color: '#ffffff',
+              weight: 2,
+              opacity: 1,
+              fillOpacity: 0.8
+            });
+
+            marker.bindPopup(`
+              <div style="padding: 12px; max-width: 300px; font-family: system-ui;">
+                <h3 style="font-weight: bold; font-size: 16px; margin-bottom: 8px; color: #1f2937;">ARGO Float ${point.floatId}</h3>
+                <p style="margin: 4px 0;"><strong>Location:</strong> ${point.latitude.toFixed(3)}°N, ${point.longitude.toFixed(3)}°E</p>
+                <p style="margin: 4px 0;"><strong>Temperature:</strong> ${point.temperature}°C</p>
+                <p style="margin: 4px 0;"><strong>Salinity:</strong> ${point.salinity} PSU</p>
+                <p style="margin: 4px 0;"><strong>Depth:</strong> ${point.depth}m</p>
+                <p style="margin: 4px 0;"><strong>Region:</strong> ${point.region}</p>
+                <p style="font-size: 12px; color: #6b7280; margin-top: 8px;">${new Date(point.timestamp).toLocaleString()}</p>
+                ${point.isRecent ? '<span style="background: #dcfce7; color: #166534; padding: 2px 8px; border-radius: 4px; font-size: 12px; display: inline-block; margin-top: 4px;">Recent Data</span>' : ''}
+              </div>
+            `);
+
+            markersRef.current?.addLayer(marker);
+          } catch (error) {
+            console.error(`❌ Failed to create marker ${index}:`, error);
+          }
+        });
+      }
+      
+      // Refresh map after marker toggle
+      setTimeout(() => {
+        if (mapRef.current) {
+          mapRef.current.invalidateSize(true);
+          mapRef.current.eachLayer((layer: any) => {
+            if (layer._url && layer.redraw) {
+              layer.redraw();
+            }
+          });
+        }
+      }, 100);
+    }
+  }, [showMarkers, selectedParameter, argoData]);
+
+  const refreshData = async () => {
+    setLoading(true);
+    try {
+      console.log(`🔄 Refreshing ARGO data for map...`);
+      const response = await argoApiService.fetchArgoData('Last Month', selectedRegion);
+      setArgoData(response.data);
+      setDataSource(response.dataSource);
+      console.log(`✅ Map refreshed with ${response.data.length} ARGO data points`);
+    } catch (error) {
+      console.error('Failed to refresh ARGO data:', error);
+    } finally {
+      setLoading(false);
     }
   };
 
   return (
-    <LoadScript
-      googleMapsApiKey={apiKey}
-      libraries={libraries as ["places", "visualization"]}
-    >
-      <div className="relative w-full h-full bg-gray-100 rounded-lg overflow-hidden">
-        <div className="absolute top-4 left-4 z-10 flex flex-col gap-2">
-          <Autocomplete
-            onLoad={(autocomplete: google.maps.places.Autocomplete) => (autocompleteRef.current = autocomplete)}
-            onPlaceChanged={onPlaceChanged}
-          >
-            <input
-              type="text"
-              placeholder="Search ARGO locations (e.g., Mumbai)"
-              className="w-60 p-2 rounded-md shadow-md border border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
-            />
-          </Autocomplete>
-          <button
-            onClick={() => setShowHeatmap(!showHeatmap)}
-            className="px-4 py-2 bg-blue-500 text-white rounded-md shadow-md hover:bg-blue-600 transition w-60"
-          >
-            {showHeatmap ? 'Hide Heatmap' : 'Show Heatmap'}
-          </button>
+    <div className="flex flex-col w-full h-[700px] bg-gradient-to-br from-blue-900 to-blue-600 rounded-lg overflow-hidden shadow-lg">
+      {loading && (
+        <div className="absolute inset-0 bg-black/20 flex items-center justify-center z-20">
+          <div className="bg-white rounded-lg p-4 flex items-center space-x-3">
+            <RefreshCw className="w-5 h-5 animate-spin text-blue-600" />
+            <span className="text-gray-700">Loading ARGO data...</span>
+          </div>
         </div>
-        <GoogleMap
-          mapContainerStyle={mapContainerStyle}
-          zoom={4}
-          center={{ lat: -20, lng: 80 }}
-          onLoad={onLoad}
-          options={{
-            styles: [
-              {
-                featureType: "water",
-                elementType: "geometry",
-                stylers: [{ color: "#193341" }]
-              },
-              {
-                featureType: "landscape",
-                elementType: "geometry",
-                stylers: [{ color: "#2c5aa0" }]
-              }
-            ]
-          }}
-        >
-          {showHeatmap && heatmapData.length > 0 && (
-            <HeatmapLayer
-              data={heatmapData}
-              options={{
-                radius: 20,
-                opacity: 0.6,
-                gradient: ['rgba(0, 255, 255, 0)', 'rgba(0, 255, 255, 0.45)', 'rgba(0, 0, 255, 0.8)', 'rgba(255, 0, 0, 1)'],
-              }}
-            />
-          )}
-          {showHeatmap && heatmapData.length === 0 && (
-            <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 text-yellow-500">
-              Heatmap data loading...
-            </div>
-          )}
-        </GoogleMap>
+      )}
+
+      {/* Map Controls - Moved to top */}
+      <div className="bg-white/95 backdrop-blur-sm p-4 border-b border-white/20">
+        <div className="flex flex-wrap items-center gap-4">
+          {/* Data Source Info */}
+          <div className={`px-3 py-2 rounded-md shadow-sm text-sm font-medium ${
+            dataSource === 'api'
+              ? 'bg-green-100 text-green-800 border border-green-200'
+              : 'bg-orange-100 text-orange-800 border border-orange-200'
+          }`}>
+            {dataSource === 'api' ? '🌊 Real ARGO Data' : '🔄 Enhanced Data'} • {argoData.length} points
+          </div>
+
+          {/* Parameter Tabs */}
+          <Tabs value={selectedParameter} className="flex-shrink-0">
+            <TabsList className="grid grid-cols-3 bg-white">
+              <TabsTrigger value="temperature" className="flex items-center gap-1 text-xs">
+                <Thermometer className="w-3 h-3" /> Temp
+              </TabsTrigger>
+              <TabsTrigger value="salinity" className="flex items-center gap-1 text-xs">
+                <Droplets className="w-3 h-3" /> Salt
+              </TabsTrigger>
+              <TabsTrigger value="depth" className="flex items-center gap-1 text-xs">
+                <Gauge className="w-3 h-3" /> Depth
+              </TabsTrigger>
+            </TabsList>
+          </Tabs>
+
+          {/* Control Buttons */}
+          <div className="flex gap-2">
+            <Button
+              onClick={() => setShowHeatmap(!showHeatmap)}
+              variant={showHeatmap ? "default" : "outline"}
+              className="flex items-center gap-2"
+              size="sm"
+            >
+              {showHeatmap ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
+              {showHeatmap ? 'Hide Heatmap' : 'Show Heatmap'}
+            </Button>
+
+            <Button
+              onClick={() => setShowMarkers(!showMarkers)}
+              variant={showMarkers ? "default" : "outline"}
+              className="flex items-center gap-2"
+              size="sm"
+            >
+              {showMarkers ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
+              {showMarkers ? 'Hide Markers' : 'Show Markers'}
+            </Button>
+
+            <Button
+              onClick={refreshData}
+              variant="outline"
+              className="flex items-center gap-2"
+              size="sm"
+              disabled={loading}
+            >
+              <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+              Refresh Data
+            </Button>
+          </div>
+        </div>
       </div>
-    </LoadScript>
+
+      {/* Map Container */}
+      <div className="relative flex-1">
+
+        {/* Scale Legend */}
+        <div className="absolute bottom-4 left-4 z-10 bg-white/90 rounded-lg p-3 shadow-md">
+          <h4 className="text-sm font-semibold mb-2 capitalize">{selectedParameter} Scale</h4>
+          <div className="flex items-center space-x-2">
+            <div className={`h-3 w-16 rounded ${
+              selectedParameter === 'temperature'
+                ? 'bg-gradient-to-r from-blue-500 via-green-500 via-yellow-500 to-red-500'
+                : selectedParameter === 'salinity'
+                ? 'bg-gradient-to-r from-blue-600 via-teal-400 to-orange-500'
+                : 'bg-gradient-to-r from-blue-200 via-blue-500 to-blue-900'
+            }`} />
+            <div className="text-xs text-gray-600">
+              {selectedParameter === 'temperature' ? '0°C → 30°C'
+                : selectedParameter === 'salinity' ? '30 → 40 PSU'
+                : '0m → 2000m'}
+            </div>
+          </div>
+        </div>
+
+        <div id="map" className="w-full h-full" />
+      </div>
+    </div>
   );
 };
 
