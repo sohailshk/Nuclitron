@@ -1,4 +1,0 @@
-# Minimal requirements for initial setup testing
-pydantic>=2.4.0
-pydantic-settings>=2.0.0
-python-dotenv>=1.0.0
