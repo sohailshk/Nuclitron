@@ -5,6 +5,7 @@ import { Footer } from "@/components/Footer";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { chatApi } from "@/services/chatApi";
 import { 
   Send, 
   Bot, 
@@ -44,19 +45,20 @@ export default function Chatbot() {
     {
       id: '1',
       type: 'bot',
-      content: 'Hello! I\'m your AI assistant for ARGO oceanographic data. I can help you explore temperature profiles, salinity data, float locations, and generate high-quality visualizations using FLUX.1. What would you like to know?',
+      content: 'Hello! I\'m your AI assistant powered by our RAG system for ARGO oceanographic data. I can help you explore temperature profiles, salinity data, float locations, and provide intelligent insights from our real-time database. What would you like to know about ocean data?',
       timestamp: new Date().toLocaleTimeString(),
       suggestions: [
         'Show me temperature profiles in the Arabian Sea',
-        'Create an ocean temperature visualization',
-        'Generate an image of ARGO float deployment',
-        'What are the salinity levels near the equator?'
+        'What is the average salinity in the Indian Ocean?',
+        'Find floats near the equator',
+        'What are the deepest measurements we have?'
       ]
     }
   ]);
   const [inputValue, setInputValue] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [apiKey, setApiKey] = useState('');
+  const [systemStatus, setSystemStatus] = useState<'checking' | 'online' | 'offline'>('checking');
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => {
@@ -73,6 +75,23 @@ export default function Chatbot() {
     if (savedApiKey) {
       setApiKey(savedApiKey);
     }
+  }, []);
+
+  // Check system status
+  useEffect(() => {
+    const checkSystemStatus = async () => {
+      try {
+        const isConnected = await chatApi.testConnection();
+        setSystemStatus(isConnected ? 'online' : 'offline');
+      } catch (error) {
+        setSystemStatus('offline');
+      }
+    };
+    
+    checkSystemStatus();
+    // Check status every 30 seconds
+    const interval = setInterval(checkSystemStatus, 30000);
+    return () => clearInterval(interval);
   }, []);
 
   const shouldGenerateImage = (prompt: string): boolean => {
@@ -204,6 +223,91 @@ Would you like me to generate a visualization or provide more specific informati
     }
   };
 
+  // Helper function to format structured responses
+  const formatResponseContent = (content: string) => {
+    // Check if content contains structured formatting
+    if (content.includes('**') || content.includes('📊') || content.includes('|')) {
+      return (
+        <div className="space-y-2">
+          {content.split('\n').map((line, index) => {
+            // Handle headers with **
+            if (line.includes('**') && line.includes('**')) {
+              const headerMatch = line.match(/\*\*(.*?)\*\*/);
+              if (headerMatch) {
+                return (
+                  <div key={index} className="font-semibold text-primary mt-3 mb-1 flex items-center gap-2">
+                    <span className="text-lg">{headerMatch[1]}</span>
+                  </div>
+                );
+              }
+            }
+            
+            // Handle emoji bullets and structured data
+            if (line.includes('📊') || line.includes('🌡️') || line.includes('🧂') || line.includes('📍') || line.includes('🔬')) {
+              return (
+                <div key={index} className="bg-blue-50 border-l-4 border-blue-500 p-3 my-2 rounded-r">
+                  <span className="font-medium text-blue-900">{line}</span>
+                </div>
+              );
+            }
+            
+            // Handle table-like data with |
+            if (line.includes('|') && line.includes('----')) {
+              return null; // Skip table separator lines
+            }
+            if (line.includes('|') && !line.includes('----')) {
+              const cells = line.split('|').map(cell => cell.trim()).filter(cell => cell);
+              if (cells.length > 1) {
+                return (
+                  <div key={index} className="grid grid-cols-4 gap-2 bg-gray-50 p-2 rounded text-xs border">
+                    {cells.map((cell, cellIndex) => (
+                      <div key={cellIndex} className={`${cellIndex === 0 ? 'font-semibold' : ''}`}>
+                        {cell}
+                      </div>
+                    ))}
+                  </div>
+                );
+              }
+            }
+            
+            // Handle bullet points
+            if (line.trim().startsWith('•') || line.trim().startsWith('-')) {
+              return (
+                <div key={index} className="ml-4 text-sm flex items-start gap-2">
+                  <span className="text-primary mt-1">•</span>
+                  <span>{line.trim().substring(1).trim()}</span>
+                </div>
+              );
+            }
+            
+            // Handle code blocks
+            if (line.includes('```') || line.trim().startsWith('WMO') || line.trim().match(/^\d+m\s+\|/)) {
+              return (
+                <div key={index} className="bg-gray-900 text-green-400 p-2 rounded font-mono text-xs overflow-x-auto">
+                  {line}
+                </div>
+              );
+            }
+            
+            // Handle regular lines
+            if (line.trim()) {
+              return (
+                <div key={index} className="text-sm leading-relaxed">
+                  {line}
+                </div>
+              );
+            }
+            
+            return <div key={index} className="h-1"></div>; // Empty line spacing
+          })}
+        </div>
+      );
+    }
+    
+    // Fallback to simple text
+    return <div className="text-sm whitespace-pre-wrap">{content}</div>;
+  };
+
   const handleSendMessage = async () => {
     if (!inputValue.trim() || isLoading) return;
 
@@ -220,52 +324,29 @@ Would you like me to generate a visualization or provide more specific informati
     setIsLoading(true);
 
     try {
-      const needsImage = shouldGenerateImage(currentInput);
+      // Use our ChatAPI service to call the FastAPI backend
+      const chatResponse = await chatApi.sendMessage(currentInput);
       
-      if (needsImage) {
-        // Call FLUX image generation API
-        const { text, imageData } = await callHuggingFaceImageAPI(currentInput);
-        
-        const botResponse: Message = {
-          id: (Date.now() + 1).toString(),
-          type: 'bot',
-          content: text || 'I\'ve generated a high-quality visualization using FLUX.1 based on your request.',
-          timestamp: new Date().toLocaleTimeString(),
-          imageData: imageData,
-          hasImage: !!imageData,
-          suggestions: [
-            'Create another visualization',
-            'Modify this image style',
-            'Generate a different perspective',
-            'Export this image'
-          ]
-        };
-        
-        setMessages(prev => [...prev, botResponse]);
-      } else {
-        // Call text API
-        const aiResponse = await callHuggingFaceTextAPI(currentInput);
-        
-        const botResponse: Message = {
-          id: (Date.now() + 1).toString(),
-          type: 'bot',
-          content: aiResponse,
-          timestamp: new Date().toLocaleTimeString(),
-          suggestions: generateSuggestions(currentInput)
-        };
-        
-        setMessages(prev => [...prev, botResponse]);
-      }
+      const botResponse: Message = {
+        id: (Date.now() + 1).toString(),
+        type: 'bot',
+        content: chatResponse.response_text,
+        timestamp: new Date().toLocaleTimeString(),
+        suggestions: chatResponse.suggestions || generateSuggestions(currentInput),
+        data: chatResponse.data_results
+      };
+      
+      setMessages(prev => [...prev, botResponse]);
     } catch (error) {
       const errorMessage: Message = {
         id: (Date.now() + 1).toString(),
         type: 'bot',
-        content: `I apologize, but I encountered an error: ${error instanceof Error ? error.message : 'Unknown error'}. Please try again or check your API configuration.`,
+        content: `I apologize, but I encountered an error: ${error instanceof Error ? error.message : 'Unknown error'}. Please make sure the API server is running on port 8000.`,
         timestamp: new Date().toLocaleTimeString(),
         error: true,
         suggestions: [
           'Try rephrasing your question',
-          'Check API key configuration',
+          'Check if the API server is running',
           'Ask about ARGO data basics',
           'Request help with oceanographic terms'
         ]
@@ -438,7 +519,7 @@ Would you like me to generate a visualization or provide more specific informati
                             ? 'bg-red-50 border border-red-200'
                             : 'bg-muted'
                         }`}>
-                          <div className="text-sm whitespace-pre-wrap">{message.content}</div>
+                          {formatResponseContent(message.content)}
                           
                           {/* Generated Image */}
                           {message.hasImage && message.imageData && (

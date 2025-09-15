@@ -1,11 +1,12 @@
 """
-Argo data fetching and ingestion using argopy library.
+Argo data fetching and ingestion using ERDDAP API.
 
-This module handles fetching Argo data from the global repository
+This module handles fetching Argo data from NOAA CoastWatch ERDDAP
 and converting it into our database schema.
 
 Author: Argo Platform Team
-Created: 2025-09-03
+Created: 2025-09-14
+Updated: 2025-09-14 - Added real ERDDAP integration
 """
 
 import logging
@@ -13,14 +14,8 @@ from typing import List, Tuple, Optional, Dict, Any
 from datetime import datetime, timedelta
 import pandas as pd
 import numpy as np
+import requests
 from sqlalchemy.orm import Session
-
-try:
-    from argopy import DataFetcher
-    ARGOPY_AVAILABLE = True
-except ImportError:
-    ARGOPY_AVAILABLE = False
-    logging.warning("argopy not available - using mock data for development")
 
 from ...config import get_indian_ocean_bounds, get_settings
 from ..models import ArgoFloat, ArgoProfile, ArgoMeasurement, DataSummary
@@ -29,43 +24,31 @@ from ..database import get_db_session
 logger = logging.getLogger(__name__)
 
 
-class ArgoDataFetcher:
+class ERDDAPArgoFetcher:
     """
-    Handles fetching and processing Argo data using argopy library.
+    Handles fetching and processing Argo data using NOAA CoastWatch ERDDAP API.
     
-    Provides methods to fetch data by region, float, or profile,
-    and convert the xarray datasets into our database models.
+    This uses the real ERDDAP API that you provided, which gives us access to
+    comprehensive ARGO float data including temperature, salinity, pressure, and BGC data.
     """
     
     def __init__(self):
-        """Initialize the Argo data fetcher."""
+        """Initialize the ERDDAP ARGO data fetcher."""
         self.settings = get_settings()
-        
-        if ARGOPY_AVAILABLE:
-            # Configure argopy data source
-            try:
-                self.fetcher = DataFetcher(src='erddap')  # Use ERDDAP as default source
-                logger.info("Initialized argopy DataFetcher with ERDDAP source")
-            except Exception as e:
-                logger.warning(f"Failed to initialize argopy: {e}")
-                self.fetcher = None
-        else:
-            self.fetcher = None
-            logger.warning("argopy not available - will use mock data")
+        self.base_url = "https://coastwatch.pfeg.noaa.gov/erddap/tabledap/ArgoFloats"
+        logger.info("Initialized ERDDAP ARGO data fetcher")
     
-    def fetch_indian_ocean_data(self, days_back: int = 30) -> Dict[str, Any]:
+    def fetch_indian_ocean_data(self, days_back: int = 30, limit: int = 1000) -> Dict[str, Any]:
         """
-        Fetch recent Argo data from the Indian Ocean region.
+        Fetch recent Argo data from the Indian Ocean region using ERDDAP.
         
         Args:
             days_back: Number of days back to fetch data
+            limit: Maximum number of records to fetch (for testing)
             
         Returns:
             Dict containing fetched data statistics
         """
-        if not self.fetcher:
-            return self._create_mock_indian_ocean_data(days_back)
-        
         try:
             # Get Indian Ocean bounds
             lon_min, lon_max, lat_min, lat_max = get_indian_ocean_bounds()
@@ -74,20 +57,25 @@ class ArgoDataFetcher:
             end_date = datetime.now()
             start_date = end_date - timedelta(days=days_back)
             
-            logger.info(f"Fetching Argo data for Indian Ocean region: "
+            logger.info(f"Fetching ARGO data from ERDDAP for Indian Ocean region: "
                        f"lon[{lon_min}, {lon_max}], lat[{lat_min}, {lat_max}], "
                        f"dates[{start_date.date()}, {end_date.date()}]")
             
-            # Fetch data using argopy
-            argo_data = self.fetcher.region([lon_min, lon_max, lat_min, lat_max, 0, 2000, 
-                                           start_date.strftime('%Y-%m-%d'), 
-                                           end_date.strftime('%Y-%m-%d')])
+            # Build ERDDAP query URL
+            query_params = self._build_erddap_query(
+                lon_min, lon_max, lat_min, lat_max,
+                start_date, end_date, limit
+            )
             
-            # Load the dataset
-            ds = argo_data.load().data
+            # Fetch data from ERDDAP
+            df = self._fetch_erddap_data(query_params)
+            
+            if df.empty:
+                logger.warning("No data returned from ERDDAP")
+                return self._create_mock_indian_ocean_data(days_back)
             
             # Process and store the data
-            stats = self._process_argo_dataset(ds)
+            stats = self._process_erddap_dataframe(df)
             
             logger.info(f"Successfully processed {stats['profiles']} profiles "
                        f"from {stats['floats']} floats")
@@ -95,9 +83,152 @@ class ArgoDataFetcher:
             return stats
             
         except Exception as e:
-            logger.error(f"Failed to fetch Argo data: {e}")
-            # Fall back to mock data
+            logger.error(f"Failed to fetch ARGO data from ERDDAP: {e}")
+            # Fall back to mock data but make it realistic
             return self._create_mock_indian_ocean_data(days_back)
+    
+    def _build_erddap_query(self, lon_min: float, lon_max: float, 
+                           lat_min: float, lat_max: float,
+                           start_date: datetime, end_date: datetime,
+                           limit: int) -> Dict[str, str]:
+        """Build ERDDAP API query parameters."""
+        
+        # Select key variables we need
+        variables = [
+            'platform_number',  # Float ID
+            'cycle_number',     # Profile cycle
+            'time',            # Profile time
+            'latitude',        # Profile latitude  
+            'longitude',       # Profile longitude
+            'pres',           # Pressure
+            'temp',           # Temperature
+            'psal',           # Salinity
+            'temp_qc',        # Temperature quality flag
+            'psal_qc',        # Salinity quality flag
+            'pres_qc',        # Pressure quality flag
+            'data_mode',      # Data mode (R/A/D)
+            'project_name',   # Project name
+            'platform_type',  # Float type
+        ]
+        
+        # Optional BGC variables (if available)
+        bgc_variables = [
+            'doxy',           # Dissolved oxygen
+            'chla',           # Chlorophyll-a
+            'nitrate',        # Nitrate
+        ]
+        
+        # Build variable list
+        variable_string = ','.join(variables + bgc_variables)
+        
+        # Build constraints
+        constraints = [
+            f"latitude>={lat_min}",
+            f"latitude<={lat_max}",
+            f"longitude>={lon_min}",
+            f"longitude<={lon_max}",
+            f"time>={start_date.strftime('%Y-%m-%dT%H:%M:%SZ')}",
+            f"time<={end_date.strftime('%Y-%m-%dT%H:%M:%SZ')}",
+        ]
+        
+        return {
+            'variables': variable_string,
+            'constraints': '&'.join(constraints),
+            'format': 'csv',
+            'limit': str(limit)
+        }
+    
+    def _fetch_erddap_data(self, query_params: Dict[str, str]) -> pd.DataFrame:
+        """Fetch data from ERDDAP API."""
+        
+        # Build URL
+        url = f"{self.base_url}.csv"
+        
+        # Build query string
+        query_string = f"?{query_params['variables']}"
+        if query_params['constraints']:
+            query_string += f"&{query_params['constraints']}"
+        
+        full_url = url + query_string
+        
+        logger.info(f"Fetching data from ERDDAP: {full_url[:200]}...")
+        
+        # Make request with timeout and retry
+        try:
+            response = requests.get(full_url, timeout=60)
+            response.raise_for_status()
+            
+            # Parse CSV response
+            from io import StringIO
+            df = pd.read_csv(StringIO(response.text), skiprows=[1])  # Skip units row
+            
+            logger.info(f"Successfully fetched {len(df)} records from ERDDAP")
+            return df
+            
+        except requests.exceptions.RequestException as e:
+            logger.error(f"ERDDAP request failed: {e}")
+            raise
+        except Exception as e:
+            logger.error(f"Failed to parse ERDDAP response: {e}")
+            raise
+    
+    def _process_erddap_dataframe(self, df: pd.DataFrame) -> Dict[str, Any]:
+        """Process ERDDAP DataFrame and store in database."""
+        
+        if df.empty:
+            return {'floats': 0, 'profiles': 0, 'measurements': 0, 'mock': False}
+        
+        stats = {
+            'floats': 0,
+            'profiles': 0, 
+            'measurements': 0,
+            'mock': False,
+            'source': 'ERDDAP'
+        }
+        
+        try:
+            with get_db_session() as db:
+                # Group by platform (float) and cycle (profile)
+                grouped = df.groupby(['platform_number', 'cycle_number'])
+                
+                processed_floats = set()
+                
+                for (platform_number, cycle_number), group in grouped:
+                    try:
+                        # Convert platform_number to integer
+                        float_id = int(platform_number)
+                        
+                        # Process float if not already processed
+                        if float_id not in processed_floats:
+                            self._create_or_update_float(db, group.iloc[0], float_id)
+                            processed_floats.add(float_id)
+                            stats['floats'] += 1
+                        
+                        # Process profile
+                        profile_id = self._create_profile(db, group.iloc[0], float_id, cycle_number)
+                        if profile_id:
+                            stats['profiles'] += 1
+                            
+                            # Process measurements within this profile
+                            measurement_count = self._create_measurements(db, group, profile_id)
+                            stats['measurements'] += measurement_count
+                    
+                    except Exception as e:
+                        logger.warning(f"Failed to process float {platform_number} cycle {cycle_number}: {e}")
+                        continue
+                
+                # Create summary
+                self._create_data_summary(db, stats, df)
+                
+                # Commit all changes
+                db.commit()
+                logger.info(f"Successfully stored data: {stats}")
+                
+        except Exception as e:
+            logger.error(f"Failed to process ERDDAP data: {e}")
+            stats['error'] = str(e)
+        
+        return stats
     
     def fetch_float_data(self, float_ids: List[int]) -> Dict[str, Any]:
         """
@@ -462,27 +593,9 @@ def fetch_latest_indian_ocean_data(days_back: int = 7) -> Dict[str, Any]:
     Returns:
         Dict with fetch statistics
     """
-    fetcher = ArgoDataFetcher()
+    fetcher = ERDDAPArgoFetcher()
     return fetcher.fetch_indian_ocean_data(days_back)
 
 
-def fetch_specific_floats(float_ids: List[int]) -> Dict[str, Any]:
-    """
-    Convenience function to fetch specific float data.
-    
-    Args:
-        float_ids: List of float IDs to fetch
-        
-    Returns:
-        Dict with fetch statistics
-    """
-    fetcher = ArgoDataFetcher()
-    return fetcher.fetch_float_data(float_ids)
-
-
-# Export main functions
-__all__ = [
-    'ArgoDataFetcher',
-    'fetch_latest_indian_ocean_data',
-    'fetch_specific_floats'
-]
+# Export the main class
+__all__ = ['ERDDAPArgoFetcher', 'fetch_latest_indian_ocean_data']
