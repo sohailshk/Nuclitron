@@ -26,7 +26,7 @@ class Settings(BaseSettings):
     # ========================================
     # API Keys & External Services
     # ========================================
-    gemini_api_key: str
+    gemini_api_key: str = "AIzaSyAlFcAOeyQuQL7AXzR6_DX_LYDwMpraxdA"
     openai_api_key: Optional[str] = None
     google_maps_api_key: Optional[str] = None
     google_translate_api_key: Optional[str] = None
@@ -149,54 +149,26 @@ def get_settings() -> Settings:
 
 
 def get_database_url() -> str:
-    """
-    Get the complete database URL for SQLAlchemy.
-    
-    Returns:
-        str: Formatted database URL
-    """
     settings = get_settings()
     return settings.database_url
 
 
 def get_indian_ocean_bounds() -> Tuple[float, float, float, float]:
-    """
-    Get the geographic bounds for the Indian Ocean region.
-    
-    Returns:
-        Tuple[float, float, float, float]: (lon_min, lon_max, lat_min, lat_max)
-    """
     settings = get_settings()
     return settings.indian_ocean_bounds
 
 
 def is_development() -> bool:
-    """
-    Check if running in development mode.
-    
-    Returns:
-        bool: True if in development mode
-    """
     return get_settings().development_mode
 
 
 def get_gemini_api_key() -> str:
-    """
-    Get the Google Gemini API key.
-    
-    Returns:
-        str: Gemini API key
-        
-    Raises:
-        ValueError: If API key is not configured
-    """
     settings = get_settings()
     if not settings.gemini_api_key:
         raise ValueError("GEMINI_API_KEY not configured")
     return settings.gemini_api_key
 
 
-# Export commonly used settings
 __all__ = [
     'Settings',
     'get_settings',

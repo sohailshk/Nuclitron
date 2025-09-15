@@ -20,8 +20,7 @@ import {
   ZAxis,
   Cell
 } from 'recharts';
-import { argoApiService, ArgoApiResponse } from '@/services/argoApi';
-import { ArgoDataPoint } from '@/types/argo';
+import { argoApiService, ArgoApiResponse, ArgoDataPoint } from '@/services/argoApi';
 import { 
   Card, 
   CardContent, 
@@ -785,13 +784,18 @@ const ArgoDataGraphs: React.FC = () => {
           </CardContent>
         </Card>
         
-        <Card>
+        <Card className={dataSource === 'api' ? "border-green-500 bg-green-50" : "border-orange-500 bg-orange-50"}>
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-muted-foreground">Data Coverage</p>
+                <div className="flex items-center space-x-2 mb-1">
+                  <p className="text-sm text-muted-foreground">Data Source</p>
+                  <Badge variant={dataSource === 'api' ? 'default' : 'secondary'} className="text-xs">
+                    {dataSource === 'api' ? 'R' : 'M'}
+                  </Badge>
+                </div>
                 <p className="text-2xl font-bold text-chart-temperature">
-                  {selectedRegion === 'All' ? 'Global' : selectedRegion}
+                  {selectedRegion === 'All' ? 'Indian Ocean' : selectedRegion}
                 </p>
                 <p className="text-xs text-muted-foreground">
                   {totalFloats.toLocaleString()} active sensors
