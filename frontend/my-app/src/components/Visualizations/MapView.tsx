@@ -41,37 +41,49 @@ L.Icon.Default.mergeOptions({
 })
 
 // Ocean coordinate validation function
+
 const isLikelyOcean = (lat: number, lon: number) => {
-  // Basic checks for major continental landmasses (simplified)
-  // This is a rough approximation to avoid obvious land masses
-  
-  // North America mainland
-  if (lon > -130 && lon < -60 && lat > 25 && lat < 70) return false
-  
-  // Europe and western Asia
-  if (lon > -10 && lon < 60 && lat > 35 && lat < 75) return false
-  
-  // Asia mainland  
-  if (lon > 70 && lon < 140 && lat > 15 && lat < 55) return false
-  
-  // Australia
-  if (lon > 110 && lon < 155 && lat > -45 && lat < -10) return false
-  
+  // Enhanced checks for major continental landmasses and known problematic regions
+  // This is a rough approximation; for perfect accuracy, a dedicated geospatial library or dataset would be needed.
+
+  // Check for valid overall coordinate ranges
+  if (lat < -90 || lat > 90) return false;
+  if (lon < -180 || lon > 180) return false;
+
+  // General Landmasses (expanded/adjusted)
+  // North America
+  if (lon > -170 && lon < -50 && lat > 10 && lat < 85) return false;
+  // South America
+  if (lon > -90 && lon < -30 && lat > -60 && lat < 15) return false;
+  // Europe & Asia (largely combined for simplicity in this approximation)
+  if (lon > -10 && lon < 180 && lat > 0 && lat < 85) return false; // Covers most of Eurasia
   // Africa
-  if (lon > 10 && lon < 50 && lat > -35 && lat < 35) return false
-  
-  // Antarctica (mostly land/ice)
-  if (lat < -75) return false
-  
-  // Greenland
-  if (lon > -50 && lon < -20 && lat > 60 && lat < 85) return false
-  
-  // Check for valid ocean coordinate ranges
-  if (lat < -85 || lat > 85) return false
-  if (lon < -180 || lon > 180) return false
-  
-  return true
+  if (lon > -20 && lon < 60 && lat > -40 && lat < 40) return false;
+  // Australia
+  if (lon > 105 && lon < 160 && lat > -50 && lat < -10) return false;
+  // Antarctica
+  if (lat < -60) return false; // Covers the Antarctic continent and surrounding ice sheets
+
+  // Specific problematic areas (e.g., large islands, narrow straits where general boxes fail)
+  // Mediterranean Sea (often misidentified as ocean due to narrow land borders)
+  if (lon > -6 && lon < 37 && lat > 30 && lat < 46) return false;
+  // Red Sea / Arabian Peninsula
+  if (lon > 30 && lon < 60 && lat > 12 && lat < 35) return false;
+  // Southeast Asia / Indonesian archipelago (very complex, rough approximation)
+  if (lon > 95 && lon < 150 && lat > -10 && lat < 20) return false;
+  // Caribbean (some parts are very close to land)
+  if (lon > -90 && lon < -60 && lat > 10 && lat < 28) return false;
+  // Japan / Korea
+  if (lon > 125 && lon < 148 && lat > 30 && lat < 46) return false;
+  // UK/Ireland
+  if (lon > -12 && lon < 3 && lat > 49 && lat < 60) return false;
+  // New Zealand
+  if (lon > 165 && lon < 180 && lat > -48 && lat < -33) return false;
+
+  // If none of the above land checks returned false, it's likely ocean
+  return true;
 }
+
 
 const UpdateMapView = ({ data }: UpdateMapViewProps) => {
   const map = useMap()
