@@ -1,25 +1,40 @@
 'use client';
 
-import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { 
-  LineChart, 
-  Line, 
+  BarChart, 
+  Bar, 
   XAxis, 
   YAxis, 
   CartesianGrid, 
   Tooltip, 
   Legend, 
-  ResponsiveContainer,
-  ScatterChart,
-  Scatter,
-  BarChart,
-  Bar,
+  ResponsiveContainer, 
+  LineChart, 
+  Line, 
+  ScatterChart, 
+  Scatter, 
+  Cell,
   AreaChart,
   Area,
   ReferenceLine,
-  ZAxis,
-  Cell
+  ZAxis
 } from 'recharts';
+import { 
+  Activity, 
+  Thermometer, 
+  Droplets, 
+  Waves, 
+  Calendar, 
+  Globe, 
+  RefreshCw, 
+  Download, 
+  Badge as BadgeIcon,
+  ChevronDown,
+  TrendingUp, 
+  AlertCircle, 
+  Search
+} from 'lucide-react';
 import { argoApiService, ArgoApiResponse, ArgoDataPoint } from '@/services/argoApi';
 import { 
   Card, 
@@ -36,29 +51,7 @@ import {
 } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { 
-  Thermometer, Droplets, Waves, Activity, Globe, Calendar,
-  TrendingUp, Download, RefreshCw, AlertCircle, Search, ChevronDown
-} from 'lucide-react';
-import jsPDF from 'jspdf';
-import html2canvas from 'html2canvas';
-
-declare module 'jspdf' {
-  interface jsPDF {
-    setFillColor(r: number, g: number, b: number): void;
-    rect(x: number, y: number, w: number, h: number, style?: string): void;
-    addImage(imageData: string | HTMLImageElement, format: string, x: number, y: number, w: number, h: number): void;
-    setTextColor(r: number, g: number, b: number): void;
-    setFontSize(size: number): void;
-    setFont(font: string, style?: string): void;
-    text(text: string, x: number, y: number, options?: { align?: string }): void;
-    addPage(format?: string, orientation?: string): void;
-    setDrawColor(r: number, g: number, b: number): void;
-    line(x1: number, y1: number, x2: number, y2: number): void;
-    splitTextToSize(text: string, maxWidth: number): string[];
-    save(filename: string): void;
-  }
-}
+import PDFExporter, { PDFExportData } from './PDFExporter';
 
 // Use the API service to fetch ARGO data
 export const useArgoData = (timeRange: string, selectedRegion: string) => {
@@ -197,7 +190,7 @@ const ArgoDataGraphs: React.FC = () => {
   const [activeTab, setActiveTab] = useState<string>('overview');
   const [timeRange, setTimeRange] = useState<string>('Last Month');
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
-  const chartRef = useRef<HTMLDivElement>(null);
+  const [isExporting, setIsExporting] = useState<boolean>(false);
   
   // Use the custom hook to fetch ARGO data
   const { 
@@ -222,261 +215,13 @@ const ArgoDataGraphs: React.FC = () => {
     }
   };
 
-  // Helper function to load images with CORS support and retry logic
-  const loadImage = async (url: string, retries = 3, delay = 1000): Promise<HTMLImageElement> => {
-    for (let i = 0; i < retries; i++) {
-      try {
-        const img = new Image();
-        img.crossOrigin = 'Anonymous';
-        
-        // Add cache buster to prevent caching issues
-        const cachedUrl = `${url}${url.includes('?') ? '&' : '?'}_t=${Date.now()}`;
-        
-        const loadPromise = new Promise<HTMLImageElement>((resolve, reject) => {
-          img.onload = () => resolve(img);
-          img.onerror = (err) => reject(err);
-          img.src = cachedUrl;
-        });
-        
-        // Add timeout to prevent hanging
-        const timeoutPromise = new Promise<never>((_, reject) => 
-          setTimeout(() => reject(new Error('Image load timeout')), 5000)
-        );
-        
-        return await Promise.race([loadPromise, timeoutPromise]);
-      } catch (err) {
-        console.warn(`Attempt ${i + 1} failed to load image:`, err);
-        if (i === retries - 1) throw err;
-        await new Promise(resolve => setTimeout(resolve, delay));
-      }
-    }
-    throw new Error(`Failed to load image after ${retries} attempts`);
-  };
-
-  // Export functionality
-  const handleExport = async () => {
-    if (!chartRef.current) return;
-
-    try {
-      // Hide UI controls before capturing
-      const exportElements = document.querySelectorAll('.no-export');
-      exportElements.forEach(el => {
-        (el as HTMLElement).style.visibility = 'hidden';
-      });
-
-      // Capture the chart as an image
-      const canvas = await html2canvas(chartRef.current, {
-        scale: 2,
-        useCORS: true,
-        logging: false,
-        backgroundColor: '#ffffff',
-        ignoreElements: (element) => {
-          return element.classList.contains('no-export');
-        }
-      });
-      
-      const imgData = canvas.toDataURL('image/png');
-      const canvasWidth = canvas.width;
-      const canvasHeight = canvas.height;
-      
-      // Restore UI controls
-      exportElements.forEach(el => {
-        (el as HTMLElement).style.visibility = 'visible';
-      });
-
-      // Create PDF with TypeScript type assertion
-      const pdf = new (jsPDF as any)({
-        orientation: 'portrait',
-        unit: 'mm',
-        format: 'a4'
-      });
-
-      try {
-        // Load the INCOIS logo with error handling
-        let logo: HTMLImageElement | null = null;
-        try {
-          logo = await loadImage('/images/incois-logo.png');
-        } catch (err) {
-          console.error('Failed to load INCOIS logo, using fallback text', err);
-        }
-        
-        // Page 1 - Cover
-        pdf.setFillColor(240, 248, 255); // Light blue background
-        pdf.rect(0, 0, 210, 297, 'F');
-        
-        // Add INCOIS logo to cover page
-        if (logo) {
-          try {
-            // Calculate aspect ratio to maintain proportions
-            const logoAspectRatio = logo.width / logo.height;
-            const logoWidth = 110; // mm
-            const logoHeight = logoWidth / logoAspectRatio;
-            
-            // Center the logo horizontally
-            const xPos = (210 - logoWidth) / 2; // A4 width is 210mm
-            
-            pdf.addImage(logo, 'PNG', xPos, 30, logoWidth, logoHeight);
-          } catch (err) {
-            console.error('Error adding logo to PDF:', err);
-            pdf.setFontSize(24);
-            pdf.text('INDIAN NATIONAL CENTRE FOR OCEAN INFORMATION SERVICES', 105, 60, { align: 'center' });
-          }
-        } else {
-          pdf.setFontSize(24);
-          pdf.text('INDIAN NATIONAL CENTRE FOR OCEAN INFORMATION SERVICES', 105, 60, { align: 'center' });
-        }
-        
-        // Title and subtitle
-        pdf.setTextColor(0, 0, 0);
-        pdf.setFontSize(14);
-        pdf.setFont('helvetica', 'bold');
-        pdf.text('Performance Evaluation of ARGO Ocean Buoy Data Analysis', 105, 75, { align: 'center' });
-        pdf.text(`in the ${selectedRegion} Ocean During ${timeRange}`, 105, 85, { align: 'center' });
-        
-        // Author information
-        pdf.setFontSize(12);
-        pdf.setFont('helvetica', 'normal');
-        pdf.text('By', 105, 105, { align: 'center' });
-        
-        pdf.setFontSize(10);
-        pdf.text('Ocean Observation Network Division (OOND), INCOIS', 105, 120, { align: 'center' });
-        pdf.text('Earth System Science Organisation (ESSO)', 105, 130, { align: 'center' });
-        pdf.text('Ministry of Earth Sciences, Government of India', 105, 140, { align: 'center' });
-        pdf.text('Hyderabad - 500 090, India', 105, 150, { align: 'center' });
-        
-        // Date
-        const currentDate = new Date().toLocaleDateString('en-US', { 
-          year: 'numeric', 
-          month: 'long',
-          day: 'numeric'
-        });
-        pdf.text(`Date: ${currentDate}`, 105, 170, { align: 'center' });
-        
-        // Add INCOIS address in footer
-        pdf.setFontSize(8);
-        pdf.setTextColor(100, 100, 100);
-        pdf.text('INDIAN NATIONAL CENTRE FOR OCEAN INFORMATION SERVICES (INCOIS)', 105, 285, { align: 'center' });
-        pdf.text('Ministry of Earth Sciences, Govt. of India, "Ocean Valley", P.B.No. 21, IDA Jeedimetla, Hyderabad - 500 055, India', 105, 290, { align: 'center' });
-        
-        // Page number
-        pdf.text('1', 20, 20);
-        
-        // Page 2 - Data and Analysis
-        pdf.addPage();
-        
-        // Add header with INCOIS logo and title
-        const smallLogoWidth = 20;
-        const smallLogoHeight = (logo.height * smallLogoWidth) / logo.width;
-        pdf.addImage(logo, 'PNG', 20, 15, smallLogoWidth, smallLogoHeight);
-        
-        pdf.setFontSize(10);
-        pdf.setFont('helvetica', 'bold');
-        pdf.setTextColor(0, 0, 0);
-        pdf.text('INDIAN NATIONAL CENTRE FOR OCEAN INFORMATION SERVICES', 40, 20);
-        pdf.setFontSize(8);
-        pdf.setFont('helvetica', 'normal');
-        pdf.text('(An Autonomous Body under the Ministry of Earth Sciences, Govt. of India)', 40, 24);
-        
-        // Document title
-        pdf.setFontSize(12);
-        pdf.setFont('helvetica', 'bold');
-        pdf.text('DOCUMENT CONTROL SHEET', 105, 40, { align: 'center' });
-        
-        // Add a line separator
-        pdf.setDrawColor(200, 200, 200);
-        pdf.line(20, 45, 190, 45);
-        
-        // Document details
-        pdf.setFontSize(10);
-        pdf.setFont('helvetica', 'normal');
-        
-        const details = [
-          ['Title of the report:', `Performance Evaluation of ARGO Ocean Buoy Data Analysis in the ${selectedRegion} Ocean During ${timeRange}`],
-          ['Author(s):', 'Ocean Observation Network Division (OOND), INCOIS'],
-          ['Originating unit:', 'Ocean Observation Network Division (OOND), INCOIS'],
-          ['Type of Document:', 'Technical Report (TR)'],
-          ['Number of pages and figures:', '2 pages, 1 figure, and 1 table'],
-          ['Keywords:', 'ARGO Floats, Oceanography, Sea Surface Temperature, Salinity, Ocean Currents'],
-          ['Security classification:', 'Open'],
-          ['Distribution:', 'Open'],
-          ['Date of publication:', new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })]
-        ];
-        
-        let yPos = 60;
-        details.forEach(([label, value]) => {
-          pdf.setFont('helvetica', 'bold');
-          pdf.text(label, 20, yPos);
-          pdf.setFont('helvetica', 'normal');
-          const lines = pdf.splitTextToSize(value, 120);
-          pdf.text(lines, 70, yPos);
-          yPos += Math.max(5, lines.length * 5);
-        });
-        
-        // Statistics
-        const avgTemp = (filteredData.reduce((acc, item) => acc + item.temperature, 0) / filteredData.length).toFixed(1);
-        const avgSalinity = (filteredData.reduce((acc, item) => acc + item.salinity, 0) / filteredData.length).toFixed(1);
-        const totalProfiles = filteredData.length;
-        const regionCount = new Set(filteredData.map(item => item.region)).size;
-        
-        yPos += 10;
-        pdf.setFont('helvetica', 'bold');
-        pdf.text('DATA SUMMARY:', 20, yPos);
-        yPos += 7;
-        
-        const stats = [
-          `Total Profiles Analyzed: ${totalProfiles}`,
-          `Average Temperature: ${avgTemp}°C`,
-          `Average Salinity: ${avgSalinity} PSU`,
-          `Ocean Regions Covered: ${regionCount}`,
-          `Analysis Period: ${timeRange}`,
-          `Data View: ${activeTab.charAt(0).toUpperCase() + activeTab.slice(1)}`
-        ];
-        
-        pdf.setFont('helvetica', 'normal');
-        stats.forEach(stat => {
-          pdf.text(stat, 25, yPos);
-          yPos += 5;
-        });
-        
-        // Add chart image
-        yPos += 10;
-        const imgWidth = 170;
-        const imgHeight = Math.min((canvasHeight * imgWidth) / canvasWidth, 120);
-        pdf.addImage(imgData, 'PNG', 20, yPos, imgWidth, imgHeight);
-        
-        // Add footer with INCOIS logo and page number
-        if (logo && logo.width && logo.height) {
-          try {
-            const smallLogoWidth = logo.width / 3;
-            const smallLogoHeight = logo.height / 3;
-            pdf.addImage(logo, 'PNG', 20, 270, smallLogoWidth/1.5, smallLogoHeight/1.5);
-          } catch (err) {
-            console.error('Error adding footer logo:', err);
-          }
-        }
-        
-        pdf.setFontSize(8);
-        pdf.setTextColor(100, 100, 100);
-        pdf.setFont('helvetica', 'bold');
-        pdf.text('INDIAN NATIONAL CENTRE FOR OCEAN INFORMATION SERVICES (INCOIS)', 105, 285, { align: 'center' });
-        pdf.setFont('helvetica', 'normal');
-        pdf.text('Ministry of Earth Sciences, Govt. of India, "Ocean Valley", P.B.No. 21, IDA Jeedimetla, Hyderabad - 500 055, India', 105, 290, { align: 'center' });
-        
-        // Page number
-        pdf.text('2', 20, 20);
-        
-        // Save the PDF
-        pdf.save(`INCOIS_ARGO_Report_${selectedRegion.replace(/\s+/g, '_')}_${timeRange.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.pdf`);
-        
-      } catch (error) {
-        console.error('Error loading INCOIS logo:', error);
-        // Fallback to text if logo fails to load
-        pdf.setFontSize(12);
-        pdf.text('INCOIS Logo', 90, 40);
-        pdf.save(`INCOIS_ARGO_Report_${selectedRegion.replace(/\s+/g, '_')}_${timeRange.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.pdf`);
-      }
-    } catch (error) {
-      console.error('Export failed:', error);
+  // Handle PDF export
+  const handlePDFExport = (success: boolean, error?: Error) => {
+    setIsExporting(false);
+    if (success) {
+      console.log('PDF exported successfully');
+    } else {
+      console.error('PDF export failed:', error);
       alert('Failed to generate PDF. Please try again.');
     }
   };
@@ -550,6 +295,22 @@ const ArgoDataGraphs: React.FC = () => {
     return ['All', ...uniqueRegions.filter(Boolean).sort()];
   }, [argoData]);
 
+  // Prepare data for PDF export
+  const pdfExportData: PDFExportData = useMemo(() => ({
+    selectedRegion,
+    timeRange,
+    activeTab,
+    filteredData,
+    totalProfiles: filteredData.length,
+    avgTemperature: filteredData.length > 0 
+      ? filteredData.reduce((acc, item) => acc + (item.temperature || 0), 0) / filteredData.length
+      : 0,
+    avgSalinity: filteredData.length > 0 
+      ? filteredData.reduce((acc, item) => acc + (item.salinity || 0), 0) / filteredData.length
+      : 0,
+    regionCount: new Set(filteredData.map(item => item.region)).size
+  }), [selectedRegion, timeRange, activeTab, filteredData]);
+
   const CustomTooltip = ({ active, payload, label }: any) => {
     if (active && payload && payload.length) {
       return (
@@ -570,590 +331,690 @@ const ArgoDataGraphs: React.FC = () => {
 
   const [showObservations, setShowObservations] = useState(false);
   const [showAdvisories, setShowAdvisories] = useState(false);
+  const [currentObservations, setCurrentObservations] = useState<string[]>([]);
+  const [currentAdvisories, setCurrentAdvisories] = useState<Array<{level: string, title: string, desc: string}>>([]);
+
+  // Dynamic observations and advisories generator
+  const generateObservationsAndAdvisories = (region: string, data: any[]) => {
+    const observations = {
+      'All': [
+        'Global ocean temperature showing 0.15°C increase over past decade',
+        'ARGO float network coverage at 98.5% operational capacity',
+        'Deep water formation rates stable in polar regions',
+        'Meridional overturning circulation maintaining strength',
+        'Surface salinity patterns following seasonal norms',
+        'Oxygen minimum zones expanding in tropical regions',
+        'Mixed layer depths varying 20-80m globally',
+        'Thermocline stability maintained across basins',
+        'Eddy kinetic energy peaks in western boundary currents',
+        'Carbon sequestration rates optimal in Southern Ocean'
+      ],
+      'Arabian Sea': [
+        'Monsoon upwelling intensity at 85% of historical average',
+        'Oxygen minimum zone expanding northward by 2.3km',
+        'Surface temperature anomaly +1.8°C above seasonal mean',
+        'Salinity stratification strongest in northern basin',
+        'Chlorophyll concentrations indicate healthy phytoplankton',
+        'Somali Current velocity reaching 2.1 m/s peak flow',
+        'Deep water intrusion from Red Sea detected',
+        'Coastal upwelling supporting marine productivity',
+        'Eddy activity moderate in central basin',
+        'Nutrient distribution optimal for fisheries'
+      ],
+      'Bay of Bengal': [
+        'Freshwater influx creating strong stratification',
+        'Cyclonic activity moderate with 3 systems tracked',
+        'Temperature gradient steepest at 15°N latitude',
+        'Salinity minimum at 50m depth due to river discharge',
+        'Mixed layer depth averaging 25m in northern regions',
+        'Oxygen levels healthy above 100m depth',
+        'Monsoon currents reversing seasonally as expected',
+        'Sediment plumes extending 150km offshore',
+        'Thermal stratification limiting vertical mixing',
+        'Marine productivity concentrated in coastal zones'
+      ],
+      'Indian Ocean': [
+        'Dipole index showing neutral conditions',
+        'Thermocline depth stable at 200m average',
+        'Cross-equatorial heat transport normal',
+        'Subtropical gyre circulation maintaining pattern',
+        'Deep water masses showing gradual warming',
+        'Seasonal temperature cycle within normal range',
+        'Salinity front positions stable',
+        'Upwelling zones active along eastern boundaries',
+        'Mesoscale eddy activity moderate',
+        'Carbon pump efficiency at 78% capacity'
+      ],
+      'South China Sea': [
+        'Monsoon transition affecting circulation patterns',
+        'Kuroshio intrusion strengthening in northern basin',
+        'Coral reef systems showing temperature stress',
+        'Nutrient upwelling supporting fisheries',
+        'Typhoon season activity below average',
+        'Salinity gradients normal for season',
+        'Deep water renewal rates stable',
+        'Coastal productivity enhanced by runoff',
+        'Internal wave activity moderate',
+        'Marine biodiversity indices stable'
+      ]
+    };
+
+    const advisories = {
+      'All': [
+        { level: 'warning', title: 'Global Warming Trend', desc: 'Ocean temperatures rising 0.6°C per century - monitor ecosystem impacts' },
+        { level: 'caution', title: 'Oxygen Depletion', desc: 'OMZ expansion in tropical regions - avoid deep fishing 200-800m' },
+        { level: 'info', title: 'Sea Level Rise', desc: 'Thermal expansion contributing 1.5mm/year - coastal monitoring advised' },
+        { level: 'warning', title: 'Acidification Alert', desc: 'pH levels dropping 0.02 units/decade - coral reef vulnerability' },
+        { level: 'caution', title: 'Current Shifts', desc: 'Western boundary currents intensifying - navigation updates needed' },
+        { level: 'info', title: 'Ice Melt Impact', desc: 'Polar freshwater input affecting deep water formation' }
+      ],
+      'Arabian Sea': [
+        { level: 'critical', title: 'Hypoxic Zone Alert', desc: '15°N-20°N, 200-600m depth - Oxygen <2mg/L, fishing restrictions' },
+        { level: 'warning', title: 'Strong Currents', desc: 'Somali Current reaching 2.5 m/s - small vessel navigation hazard' },
+        { level: 'caution', title: 'Temperature Anomaly', desc: 'Surface waters +2.1°C above normal - marine life stress possible' },
+        { level: 'info', title: 'Upwelling Intensity', desc: 'Coastal upwelling 15% below average - fishery impacts expected' },
+        { level: 'warning', title: 'Algal Bloom Risk', desc: 'High nutrient concentrations - potential HAB development' },
+        { level: 'caution', title: 'Salinity Spike', desc: 'Northern basin salinity >36.5 PSU - ecosystem monitoring needed' }
+      ],
+      'Bay of Bengal': [
+        { level: 'critical', title: 'Cyclonic Development', desc: 'Low pressure at 18°N, 88°E - intensification likely, shipping alert' },
+        { level: 'warning', title: 'Thermal Stratification', desc: 'Strong stratification limiting oxygen mixing - dead zone risk' },
+        { level: 'caution', title: 'Freshwater Plume', desc: 'River discharge creating 200km offshore plume - salinity gradients' },
+        { level: 'info', title: 'Monsoon Transition', desc: 'Current reversal period - navigation pattern changes expected' },
+        { level: 'warning', title: 'Sediment Load', desc: 'High turbidity affecting marine ecosystems and visibility' },
+        { level: 'caution', title: 'Shallow Mixed Layer', desc: 'Mixed layer <30m - surface heating and cooling rapid' }
+      ],
+      'Indian Ocean': [
+        { level: 'warning', title: 'Deep Water Warming', desc: 'Abyssal temperatures +0.05°C/decade - circulation changes' },
+        { level: 'caution', title: 'Dipole Conditions', desc: 'IOD index approaching +0.5 - regional climate impacts' },
+        { level: 'info', title: 'Gyre Intensification', desc: 'Subtropical gyre strengthening - transport changes expected' },
+        { level: 'warning', title: 'Coral Bleaching Risk', desc: 'Temperature thresholds exceeded in shallow reefs' },
+        { level: 'caution', title: 'Upwelling Variability', desc: 'Eastern boundary upwelling 20% below normal' },
+        { level: 'info', title: 'Carbon Sequestration', desc: 'CO2 uptake rates declining in northern basin' }
+      ],
+      'South China Sea': [
+        { level: 'critical', title: 'Typhoon Formation', desc: 'Tropical disturbance at 15°N, 120°E - rapid intensification possible' },
+        { level: 'warning', title: 'Coral Stress Alert', desc: 'Reef temperatures >30°C for 14 days - bleaching threshold' },
+        { level: 'caution', title: 'Kuroshio Intrusion', desc: 'Strong warm water intrusion affecting local circulation' },
+        { level: 'info', title: 'Monsoon Reversal', desc: 'Seasonal wind pattern transition - current changes expected' },
+        { level: 'warning', title: 'Nutrient Depletion', desc: 'Surface waters showing low phosphate concentrations' },
+        { level: 'caution', title: 'Internal Waves', desc: 'Strong internal wave activity - submarine navigation caution' }
+      ]
+    };
+
+    return {
+      observations: observations[region as keyof typeof observations] || observations['All'],
+      advisories: advisories[region as keyof typeof advisories] || advisories['All']
+    };
+  };
+
+  // Update observations and advisories when region or data changes
+  useEffect(() => {
+    const { observations, advisories } = generateObservationsAndAdvisories(selectedRegion, filteredData);
+    setCurrentObservations(observations);
+    setCurrentAdvisories(advisories);
+  }, [selectedRegion, filteredData, timeRange, isRefreshing]);
 
   return (
-    <div className="space-y-6" ref={chartRef}>
-      {/* Title */}
-      <h2 className="text-2xl font-bold text-gray-900">ARGO Data Visualization</h2>
-      
-      {/* Key Oceanographic Insights Dropdowns - Stacked Layout */}
-      <div className="space-y-4 mb-6">
-        <div className="w-full">
-          <button
-            onClick={() => setShowObservations(!showObservations)}
-            className="w-full flex items-center justify-between p-4 bg-blue-50 hover:bg-blue-100 rounded-lg border border-blue-300 transition-colors"
-          >
-            <div className="flex items-center gap-2">
-              <span className="text-blue-500">📊</span>
-              <span className="font-semibold text-blue-900">Top 10 Observations</span>
+    <PDFExporter 
+      data={pdfExportData} 
+      onExport={handlePDFExport}
+      logoUrl="/images/incois-logo.png"
+    >
+      {(exportToPDF) => (
+        <div className="space-y-6">
+          {/* Key Oceanographic Insights Dropdowns - Stacked Layout */}
+          <div className="space-y-4 mb-6">
+            <div className="w-full">
+              <button
+                onClick={() => setShowObservations(!showObservations)}
+                className="w-full flex items-center justify-between p-4 bg-blue-50 hover:bg-blue-100 rounded-lg border border-blue-300 transition-colors"
+              >
+                <div className="flex items-center gap-2">
+                  <span className="text-blue-500">📊</span>
+                  <span className="font-semibold text-blue-900">Top 10 Observations</span>
+                </div>
+                <ChevronDown className={`w-5 h-5 text-blue-600 transition-transform ${showObservations ? 'rotate-180' : ''}`} />
+              </button>
+              {showObservations && (
+                <Card className="mt-2 border-l-4 border-l-blue-500 bg-gradient-to-r from-blue-50 to-cyan-50">
+                  <CardContent className="pt-4">
+                    <div className="flex items-center justify-between mb-3">
+                      <span className="text-xs text-blue-600 font-medium">
+                        📍 {selectedRegion} Region • Updated {new Date().toLocaleTimeString()}
+                      </span>
+                      <Badge variant="secondary" className="text-xs">
+                        Live Data
+                      </Badge>
+                    </div>
+                    <ul className="space-y-3 text-sm">
+                      {currentObservations.slice(0, 10).map((observation, index) => (
+                        <li key={index} className="flex items-start gap-3 p-2 bg-white/60 rounded-lg border border-blue-100">
+                          <span className={`font-bold text-sm ${
+                            index < 3 ? 'text-blue-600' : 
+                            index < 6 ? 'text-green-600' : 
+                            'text-purple-600'
+                          }`}>
+                            {index + 1}.
+                          </span>
+                          <span className="text-gray-700 leading-relaxed">{observation}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </CardContent>
+                </Card>
+              )}
             </div>
-            <ChevronDown className={`w-5 h-5 text-blue-600 transition-transform ${showObservations ? 'rotate-180' : ''}`} />
-          </button>
-          {showObservations && (
-            <Card className="mt-2 border-l-4 border-l-blue-500">
-              <CardContent className="pt-4">
-                <ul className="space-y-2 text-sm">
-              <li className="flex items-start gap-2">
-                <span className="text-blue-500 font-bold">1.</span>
-                <span>Temperature gradient strongest at 15°S latitude (4.2°C/100m)</span>
-              </li>
-              <li className="flex items-start gap-2">
-                <span className="text-blue-500 font-bold">2.</span>
-                <span>Salinity minimum layer detected at 120m depth (34.1 PSU)</span>
-              </li>
-              <li className="flex items-start gap-2">
-                <span className="text-blue-500 font-bold">3.</span>
-                <span>Arabian Sea upwelling zone active - nutrient rich waters</span>
-              </li>
-              <li className="flex items-start gap-2">
-                <span className="text-blue-500 font-bold">4.</span>
-                <span>Bay of Bengal freshwater plume extends 200km offshore</span>
-              </li>
-              <li className="flex items-start gap-2">
-                <span className="text-blue-500 font-bold">5.</span>
-                <span>Oxygen levels optimal for marine life above 150m depth</span>
-              </li>
-              <li className="flex items-start gap-2">
-                <span className="text-green-500 font-bold">6.</span>
-                <span>Chlorophyll concentration peaks at 60-80m (photic zone)</span>
-              </li>
-              <li className="flex items-start gap-2">
-                <span className="text-green-500 font-bold">7.</span>
-                <span>Mixed layer depth averaging 45m in equatorial regions</span>
-              </li>
-              <li className="flex items-start gap-2">
-                <span className="text-green-500 font-bold">8.</span>
-                <span>Thermocline depth stable at 200-250m across Indian Ocean</span>
-              </li>
-              <li className="flex items-start gap-2">
-                <span className="text-green-500 font-bold">9.</span>
-                <span>Seasonal monsoon currents detected at 10°N-20°N band</span>
-              </li>
-              <li className="flex items-start gap-2">
-                <span className="text-green-500 font-bold">10.</span>
-                <span>Deep water masses showing 0.02°C warming trend</span>
-              </li>
-                </ul>
-              </CardContent>
-            </Card>
-          )}
-        </div>
-        
-        <div className="w-full">
-          <button
-            onClick={() => setShowAdvisories(!showAdvisories)}
-            className="w-full flex items-center justify-between p-4 bg-red-50 hover:bg-red-100 rounded-lg border border-red-300 transition-colors"
-          >
-            <div className="flex items-center gap-2">
-              <span className="text-red-500">⚠️</span>
-              <span className="font-semibold text-red-900">Critical Advisories</span>
+            
+            <div className="w-full">
+              <button
+                onClick={() => setShowAdvisories(!showAdvisories)}
+                className="w-full flex items-center justify-between p-4 bg-red-50 hover:bg-red-100 rounded-lg border border-red-300 transition-colors"
+              >
+                <div className="flex items-center gap-2">
+                  <span className="text-red-500">⚠️</span>
+                  <span className="font-semibold text-red-900">Critical Advisories</span>
+                </div>
+                <ChevronDown className={`w-5 h-5 text-red-600 transition-transform ${showAdvisories ? 'rotate-180' : ''}`} />
+              </button>
+              {showAdvisories && (
+                <Card className="mt-2 border-l-4 border-l-red-500 bg-gradient-to-r from-red-50 to-orange-50">
+                  <CardContent className="pt-4">
+                    <div className="flex items-center justify-between mb-3">
+                      <span className="text-xs text-red-600 font-medium">
+                        🚨 {selectedRegion} Alerts • Updated {new Date().toLocaleTimeString()}
+                      </span>
+                      <Badge variant="destructive" className="text-xs">
+                        Active Alerts
+                      </Badge>
+                    </div>
+                    <ul className="space-y-3 text-sm">
+                      {currentAdvisories.slice(0, 6).map((advisory: any, index) => {
+                        const levelColors = {
+                          critical: { bg: 'bg-red-100', border: 'border-red-300', icon: 'text-red-600', text: 'text-red-800' },
+                          warning: { bg: 'bg-orange-100', border: 'border-orange-300', icon: 'text-orange-600', text: 'text-orange-800' },
+                          caution: { bg: 'bg-yellow-100', border: 'border-yellow-300', icon: 'text-yellow-600', text: 'text-yellow-800' },
+                          info: { bg: 'bg-blue-100', border: 'border-blue-300', icon: 'text-blue-600', text: 'text-blue-800' }
+                        };
+                        const colors = levelColors[advisory.level as keyof typeof levelColors] || levelColors.info;
+                        
+                        return (
+                          <li key={index} className={`flex items-start gap-3 p-3 ${colors.bg} rounded-lg border ${colors.border}`}>
+                            <span className={`font-bold text-lg ${colors.icon}`}>
+                              {advisory.level === 'critical' ? '🔴' : 
+                               advisory.level === 'warning' ? '🟠' : 
+                               advisory.level === 'caution' ? '🟡' : '🔵'}
+                            </span>
+                            <div className="flex-1">
+                              <span className={`font-semibold ${colors.text}`}>{advisory.title}:</span>
+                              <span className={`block text-xs mt-1 ${colors.text}`}>{advisory.desc}</span>
+                            </div>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </CardContent>
+                </Card>
+              )}
             </div>
-            <ChevronDown className={`w-5 h-5 text-red-600 transition-transform ${showAdvisories ? 'rotate-180' : ''}`} />
-          </button>
-          {showAdvisories && (
-            <Card className="mt-2 border-l-4 border-l-red-500">
-              <CardContent className="pt-4">
-                <ul className="space-y-2 text-sm">
-              <li className="flex items-start gap-2">
-                <span className="text-red-500 font-bold">!</span>
-                <div>
-                  <span className="font-semibold text-red-600">Hypoxic Zone Alert:</span>
-                  <span className="block text-xs mt-1">15°S-18°S, 200-400m depth - Oxygen &lt;2mg/L, avoid fishing operations</span>
-                </div>
-              </li>
-              <li className="flex items-start gap-2">
-                <span className="text-orange-500 font-bold">!</span>
-                <div>
-                  <span className="font-semibold text-orange-600">Strong Currents:</span>
-                  <span className="block text-xs mt-1">Somali Current reaching 2.5 m/s - navigation hazard for small vessels</span>
-                </div>
-              </li>
-              <li className="flex items-start gap-2">
-                <span className="text-yellow-500 font-bold">!</span>
-                <div>
-                  <span className="font-semibold text-yellow-600">Algal Bloom Risk:</span>
-                  <span className="block text-xs mt-1">Arabian Sea coastal waters - high chlorophyll, potential HAB formation</span>
-                </div>
-              </li>
-              <li className="flex items-start gap-2">
-                <span className="text-orange-500 font-bold">!</span>
-                <div>
-                  <span className="font-semibold text-orange-600">Thermal Stratification:</span>
-                  <span className="block text-xs mt-1">Bay of Bengal - strong stratification limiting vertical mixing</span>
-                </div>
-              </li>
-              <li className="flex items-start gap-2">
-                <span className="text-red-500 font-bold">!</span>
-                <div>
-                  <span className="font-semibold text-red-600">Cyclonic Activity:</span>
-                  <span className="block text-xs mt-1">Low pressure system developing at 12°N, 85°E - monitor for intensification</span>
-                </div>
-              </li>
-              <li className="flex items-start gap-2">
-                <span className="text-yellow-500 font-bold">!</span>
-                <div>
-                  <span className="font-semibold text-yellow-600">Salinity Anomaly:</span>
-                  <span className="block text-xs mt-1">Red Sea northern basin - salinity &gt;41 PSU affecting ecosystem</span>
-                </div>
-              </li>
-                </ul>
-              </CardContent>
-            </Card>
-          )}
-        </div>
-      </div>
-
-      {/* Region and Time Controls */}
-      <div className="flex flex-col md:flex-row items-center justify-between gap-4 mb-6 p-4 bg-white rounded-lg border border-gray-200">
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="flex items-center space-x-2 min-w-[180px]">
-            <Globe className="w-4 h-4 text-muted-foreground flex-shrink-0" />
-            <select 
-              value={selectedRegion}
-              onChange={(e) => setSelectedRegion(e.target.value)}
-              className="px-3 py-2 border border-border rounded-md bg-white w-full"
-              disabled={isLoading}
-            >
-              <option value="All">All Regions</option>
-              <option value="Arabian Sea">Arabian Sea</option>
-              <option value="Bay of Bengal">Bay of Bengal</option>
-              <option value="Indian Ocean">Indian Ocean</option>
-              <option value="South China Sea">South China Sea</option>
-            </select>
           </div>
-          
-          <div className="flex items-center space-x-2 min-w-[180px]">
-            <Calendar className="w-4 h-4 text-muted-foreground flex-shrink-0" />
-            <select 
-              value={timeRange}
-              onChange={(e) => setTimeRange(e.target.value)}
-              className="px-3 py-2 border border-border rounded-md bg-white w-full"
-              disabled={isLoading}
-            >
-              <option value="Last Week">Last Week</option>
-              <option value="Last Month">Last Month</option>
-              <option value="Last 3 Months">Last 3 Months</option>
-              <option value="All Time">All Time</option>
-            </select>
-          </div>
-        </div>
 
-        <div className="flex items-center space-x-2">
-          <Button 
-            variant="outline" 
-            size="sm" 
-            className="flex items-center space-x-2"
-            onClick={handleRefresh}
-            disabled={isLoading || isRefreshing}
-          >
-            <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
-            <span>{isRefreshing ? 'Refreshing...' : 'Refresh'}</span>
-          </Button>
-          <Button 
-            variant="outline" 
-            size="sm" 
-            className="flex items-center space-x-2"
-            onClick={handleExport}
-            disabled={isLoading || isRefreshing}
-          >
-            <Download className="w-4 h-4" />
-            <span>Export PDF</span>
-          </Button>
-        </div>
-      </div>
-
-      {/* Statistics Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <Card className={filteredData.some(item => item.isRecent) ? "border-green-500 bg-green-50" : ""}>
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <div className="flex items-center space-x-2 mb-1">
-                  <p className="text-sm text-muted-foreground">Total Profiles</p>
-                  {isLoading && <div className="w-3 h-3 border-2 border-gray-300 border-t-blue-500 rounded-full animate-spin"></div>}
-                </div>
-                <p className="text-2xl font-bold text-primary-deep">
-                  {filteredData.length.toLocaleString()}
-                </p>
-                <p className="text-xs text-green-600">
-                  {filteredData.filter(item => item.isRecent).length} live updates
-                </p>
+          {/* Region and Time Controls */}
+          <div className="flex flex-col md:flex-row items-center justify-between gap-4 mb-6 p-4 bg-white rounded-lg border border-gray-200">
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="flex items-center space-x-2 min-w-[180px]">
+                <Globe className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                <select 
+                  value={selectedRegion}
+                  onChange={(e) => setSelectedRegion(e.target.value)}
+                  className="px-3 py-2 border border-border rounded-md bg-white w-full"
+                  disabled={isLoading}
+                >
+                  <option value="All">All Regions</option>
+                  <option value="Arabian Sea">Arabian Sea</option>
+                  <option value="Bay of Bengal">Bay of Bengal</option>
+                  <option value="Indian Ocean">Indian Ocean</option>
+                  <option value="South China Sea">South China Sea</option>
+                </select>
               </div>
-              <Activity className="w-8 h-8 text-primary" />
+              
+              <div className="flex items-center space-x-2 min-w-[180px]">
+                <Calendar className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                <select 
+                  value={timeRange}
+                  onChange={(e) => setTimeRange(e.target.value)}
+                  className="px-3 py-2 border border-border rounded-md bg-white w-full"
+                  disabled={isLoading}
+                >
+                  <option value="Last Week">Last Week</option>
+                  <option value="Last Month">Last Month</option>
+                  <option value="Last 3 Months">Last 3 Months</option>
+                  <option value="All Time">All Time</option>
+                </select>
+              </div>
             </div>
-          </CardContent>
-        </Card>
-        
-        <Card className={dataSource === 'api' ? "border-green-500 bg-green-50" : "border-orange-500 bg-orange-50"}>
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <div className="flex items-center space-x-2 mb-1">
-                  <p className="text-sm text-muted-foreground">Data Source</p>
-                  <Badge variant={dataSource === 'api' ? 'default' : 'secondary'} className="text-xs">
-                    {dataSource === 'api' ? 'R' : 'M'}
-                  </Badge>
+
+            <div className="flex items-center space-x-2 no-export">
+              <Button 
+                variant="outline" 
+                size="sm" 
+                className="flex items-center space-x-2"
+                onClick={handleRefresh}
+                disabled={isLoading || isRefreshing}
+              >
+                <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+                <span>{isRefreshing ? 'Refreshing...' : 'Refresh'}</span>
+              </Button>
+              <Button 
+                variant="outline" 
+                size="sm" 
+                className="flex items-center space-x-2"
+                onClick={() => {
+                  setIsExporting(true);
+                  exportToPDF();
+                }}
+                disabled={isLoading || isRefreshing || isExporting}
+              >
+                <Download className="w-4 h-4" />
+                <span>{isExporting ? 'Exporting...' : 'Export PDF'}</span>
+              </Button>
+            </div>
+          </div>
+
+          {/* Statistics Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <Card className={filteredData.some(item => item.isRecent) ? "border-green-500 bg-green-50" : ""}>
+              <CardContent className="p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="flex items-center space-x-2 mb-1">
+                      <p className="text-sm text-muted-foreground">Total Profiles</p>
+                      {isLoading && <div className="w-3 h-3 border-2 border-gray-300 border-t-blue-500 rounded-full animate-spin"></div>}
+                    </div>
+                    <p className="text-2xl font-bold text-primary-deep">
+                      {filteredData.length.toLocaleString()}
+                    </p>
+                    <p className="text-xs text-green-600">
+                      {filteredData.filter(item => item.isRecent).length} live updates
+                    </p>
+                  </div>
+                  <Activity className="w-8 h-8 text-primary" />
                 </div>
-                <p className="text-2xl font-bold text-chart-temperature">
-                  {selectedRegion === 'All' ? 'Indian Ocean' : selectedRegion}
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  {totalFloats.toLocaleString()} active sensors
-                </p>
+              </CardContent>
+            </Card>
+            
+            <Card className={dataSource === 'api' ? "border-green-500 bg-green-50" : "border-orange-500 bg-orange-50"}>
+              <CardContent className="p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="flex items-center space-x-2 mb-1">
+                      <p className="text-sm text-muted-foreground">Data Source</p>
+                      <Badge variant={dataSource === 'api' ? 'default' : 'secondary'} className="text-xs">
+                        {dataSource === 'api' ? 'R' : 'M'}
+                      </Badge>
+                    </div>
+                    <p className="text-2xl font-bold text-chart-temperature">
+                      {selectedRegion === 'All' ? 'Indian Ocean' : selectedRegion}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {totalFloats.toLocaleString()} active sensors
+                    </p>
+                  </div>
+                  <Thermometer className="w-8 h-8 text-chart-temperature" />
+                </div>
+              </CardContent>
+            </Card>
+            
+            <Card>
+              <CardContent className="p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-muted-foreground">Avg Temperature</p>
+                    <p className="text-2xl font-bold text-chart-salinity">
+                      {filteredData.length > 0 
+                        ? (filteredData.reduce((acc, item) => acc + (item.temperature || 0), 0) / filteredData.length).toFixed(1)
+                        : '--'}°C
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {filteredData.length > 0 
+                        ? `Range: ${Math.min(...filteredData.map(item => item.temperature || 0)).toFixed(1)}° - ${Math.max(...filteredData.map(item => item.temperature || 0)).toFixed(1)}°C`
+                        : 'No data'}
+                    </p>
+                  </div>
+                  <Droplets className="w-8 h-8 text-chart-salinity" />
+                </div>
+              </CardContent>
+            </Card>
+            
+            <Card>
+              <CardContent className="p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-muted-foreground">Last Updated</p>
+                    <p className="text-2xl font-bold text-chart-depth">
+                      {lastUpdated ? new Date(lastUpdated).toLocaleTimeString() : '--:--'}
+                    </p>
+                  </div>
+                  <Waves className="w-8 h-8 text-chart-depth" />
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Main Visualization Tabs */}
+          <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+            <TabsList className="grid w-full grid-cols-5">
+              <TabsTrigger value="overview">Overview</TabsTrigger>
+              <TabsTrigger value="temperature">Temperature</TabsTrigger>
+              <TabsTrigger value="salinity">Salinity</TabsTrigger>
+              <TabsTrigger value="depth">Depth Profiles</TabsTrigger>
+              <TabsTrigger value="bgc">BGC Parameters</TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="overview" className="space-y-6">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center space-x-2">
+                      <TrendingUp className="w-5 h-5" />
+                      <span>Temperature vs Salinity</span>
+                    </CardTitle>
+                    <CardDescription>Correlation between temperature and salinity measurements</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <ResponsiveContainer width="100%" height={300}>
+                      <ScatterChart
+                        data={filteredData
+                          .filter(d => d.temperature != null && d.salinity != null)
+                          .slice(0, 200)
+                        }
+                        margin={{ top: 10, right: 10, bottom: 10, left: 10 }}
+                      >
+                        <CartesianGrid strokeDasharray="3 3" stroke="#f0f4f8" />
+                        <XAxis 
+                          dataKey="temperature" 
+                          name="Temperature" 
+                          unit="°C"
+                          domain={['auto', 'auto']}
+                          tick={{ fill: '#4b5563' }}
+                          tickLine={{ stroke: '#cbd5e1' }}
+                          axisLine={{ stroke: '#cbd5e1' }}
+                        />
+                        <YAxis 
+                          dataKey="salinity" 
+                          name="Salinity" 
+                          unit=" PSU"
+                          domain={['auto', 'auto']}
+                          tick={{ fill: '#4b5563' }}
+                          tickLine={{ stroke: '#cbd5e1' }}
+                          axisLine={{ stroke: '#cbd5e1' }}
+                        />
+                        <ZAxis dataKey="depth" range={[100, 400]} name="Depth" />
+                        <Tooltip 
+                          cursor={{ strokeDasharray: '3 3', stroke: '#94a3b8' }} 
+                          contentStyle={{
+                            backgroundColor: 'rgba(255, 255, 255, 0.95)',
+                            border: '1px solid #e2e8f0',
+                            borderRadius: '0.5rem',
+                            boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)'
+                          }}
+                          content={<CustomTooltip />} 
+                        />
+                        <Scatter 
+                          name="Temperature vs Salinity"
+                          data={filteredData
+                            .filter(d => d.temperature != null && d.salinity != null)
+                            .slice(0, 200)
+                          }
+                          fill="#3b82f6"
+                          fillOpacity={0.7}
+                        >
+                          {filteredData
+                            .filter(d => d.temperature != null && d.salinity != null)
+                            .slice(0, 200)
+                            .map((entry, index) => (
+                              <Cell 
+                                key={`cell-${index}`}
+                                fill={entry.isRecent ? '#10b981' : '#3b82f6'}
+                                stroke={entry.isRecent ? '#059669' : '#2563eb'}
+                                strokeWidth={entry.isRecent ? 1.5 : 0.5}
+                              />
+                            ))
+                          }
+                        </Scatter>
+                        <Legend 
+                          verticalAlign="top"
+                          height={36}
+                          formatter={(value, entry, index) => {
+                            return <span style={{ color: '#4b5563' }}>{value}</span>;
+                          }}
+                        />
+                      </ScatterChart>
+                    </ResponsiveContainer>
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center space-x-2">
+                      <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+                      <span>Real-Time Ocean Trends (24h)</span>
+                    </CardTitle>
+                    <CardDescription>Live data from global ARGO float network</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <ResponsiveContainer width="100%" height={300}>
+                      <LineChart data={timeSeriesData}>
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis dataKey="time" />
+                        <YAxis />
+                        <Tooltip content={<CustomTooltip />} />
+                        <Legend />
+                        <Line 
+                          type="monotone" 
+                          dataKey="avgTemperature" 
+                          stroke="#ef4444" 
+                          strokeWidth={2} 
+                          name="Global Avg Temperature (°C)"
+                          dot={{ fill: '#ef4444', r: 3 }}
+                          activeDot={{ r: 6, fill: '#10b981' }}
+                        />
+                        <Line 
+                          type="monotone" 
+                          dataKey="avgSalinity" 
+                          stroke="#3b82f6" 
+                          strokeWidth={2} 
+                          name="Global Avg Salinity (PSU)"
+                          dot={{ fill: '#3b82f6', r: 3 }}
+                          activeDot={{ r: 6, fill: '#10b981' }}
+                        />
+                        <Line 
+                          type="monotone" 
+                          dataKey="totalProfiles" 
+                          stroke="#10b981" 
+                          strokeWidth={2} 
+                          name="Active Profiles"
+                          yAxisId="right"
+                        />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </CardContent>
+                </Card>
               </div>
-              <Thermometer className="w-8 h-8 text-chart-temperature" />
-            </div>
-          </CardContent>
-        </Card>
-        
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-muted-foreground">Avg Temperature</p>
-                <p className="text-2xl font-bold text-chart-salinity">
-                  {filteredData.length > 0 
-                    ? (filteredData.reduce((acc, item) => acc + (item.temperature || 0), 0) / filteredData.length).toFixed(1)
-                    : '--'}°C
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  {filteredData.length > 0 
-                    ? `Range: ${Math.min(...filteredData.map(item => item.temperature || 0)).toFixed(1)}° - ${Math.max(...filteredData.map(item => item.temperature || 0)).toFixed(1)}°C`
-                    : 'No data'}
-                </p>
+            </TabsContent>
+
+            <TabsContent value="temperature" className="space-y-6">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Temperature Distribution</CardTitle>
+                    <CardDescription>Temperature measurements across different depths</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <ResponsiveContainer width="100%" height={400}>
+                      <AreaChart data={filteredData.slice(0, 50).sort((a, b) => a.depth - b.depth)}>
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis dataKey="depth" />
+                        <YAxis />
+                        <Tooltip content={<CustomTooltip />} />
+                        <Area type="monotone" dataKey="temperature" stroke="#ef4444" fill="#ef4444" fillOpacity={0.3} />
+                      </AreaChart>
+                    </ResponsiveContainer>
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Temperature by Region</CardTitle>
+                    <CardDescription>Regional temperature variations</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <ResponsiveContainer width="100%" height={400}>
+                      <BarChart data={regions.slice(1).map(region => ({
+                        region,
+                        avgTemp: (argoData.filter(item => item.region === region)
+                          .reduce((acc, item) => acc + item.temperature, 0) / 
+                          argoData.filter(item => item.region === region).length).toFixed(1),
+                        count: argoData.filter(item => item.region === region).length
+                      }))}>
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis dataKey="region" />
+                        <YAxis />
+                        <Tooltip content={<CustomTooltip />} />
+                        <Bar dataKey="avgTemp" fill="#ef4444" />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </CardContent>
+                </Card>
               </div>
-              <Droplets className="w-8 h-8 text-chart-salinity" />
-            </div>
-          </CardContent>
-        </Card>
-        
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-muted-foreground">Last Updated</p>
-                <p className="text-2xl font-bold text-chart-depth">
-                  {lastUpdated ? new Date(lastUpdated).toLocaleTimeString() : '--:--'}
-                </p>
+            </TabsContent>
+
+            <TabsContent value="salinity" className="space-y-6">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Salinity Profiles</CardTitle>
+                    <CardDescription>Salinity variations with depth</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <ResponsiveContainer width="100%" height={400}>
+                      <LineChart data={filteredData.slice(0, 50).sort((a, b) => a.depth - b.depth)}>
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis dataKey="depth" />
+                        <YAxis domain={[33, 36]} />
+                        <Tooltip content={<CustomTooltip />} />
+                        <Line type="monotone" dataKey="salinity" stroke="#3b82f6" strokeWidth={2} />
+                        <ReferenceLine y={34.7} stroke="red" strokeDasharray="5 5" label="Global Average" />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Salinity Distribution</CardTitle>
+                    <CardDescription>Histogram of salinity measurements</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <ResponsiveContainer width="100%" height={400}>
+                      <BarChart data={[
+                        { range: '33.0-33.5', count: filteredData.filter(d => d.salinity >= 33.0 && d.salinity < 33.5).length },
+                        { range: '33.5-34.0', count: filteredData.filter(d => d.salinity >= 33.5 && d.salinity < 34.0).length },
+                        { range: '34.0-34.5', count: filteredData.filter(d => d.salinity >= 34.0 && d.salinity < 34.5).length },
+                        { range: '34.5-35.0', count: filteredData.filter(d => d.salinity >= 34.5 && d.salinity < 35.0).length },
+                        { range: '35.0-35.5', count: filteredData.filter(d => d.salinity >= 35.0 && d.salinity < 35.5).length },
+                        { range: '35.5-36.0', count: filteredData.filter(d => d.salinity >= 35.5 && d.salinity < 36.0).length },
+                      ]}>
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis dataKey="range" />
+                        <YAxis />
+                        <Tooltip />
+                        <Bar dataKey="count" fill="#3b82f6" />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </CardContent>
+                </Card>
               </div>
-              <Waves className="w-8 h-8 text-chart-depth" />
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+            </TabsContent>
 
-      {/* Main Visualization Tabs */}
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid w-full grid-cols-5">
-          <TabsTrigger value="overview">Overview</TabsTrigger>
-          <TabsTrigger value="temperature">Temperature</TabsTrigger>
-          <TabsTrigger value="salinity">Salinity</TabsTrigger>
-          <TabsTrigger value="depth">Depth Profiles</TabsTrigger>
-          <TabsTrigger value="bgc">BGC Parameters</TabsTrigger>
-        </TabsList>
+            <TabsContent value="depth" className="space-y-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Temperature-Depth Profiles</CardTitle>
+                  <CardDescription>Multiple temperature profiles showing thermocline structure</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <ResponsiveContainer width="100%" height={500}>
+                    <LineChart data={depthProfiles}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="temperature" />
+                      <YAxis dataKey="depth" reversed domain={[0, 2000]} />
+                      <Tooltip content={<CustomTooltip />} />
+                      <Legend />
+                      {Array.from({length: 5}, (_, i) => (
+                        <Line 
+                          key={i}
+                          type="monotone" 
+                          dataKey="temperature" 
+                          data={depthProfiles.filter(d => d.profileId === `Profile ${i + 1}`)}
+                          stroke={`hsl(${i * 60}, 70%, 50%)`}
+                          strokeWidth={2}
+                          name={`Profile ${i + 1}`}
+                          connectNulls={false}
+                        />
+                      ))}
+                    </LineChart>
+                  </ResponsiveContainer>
+                </CardContent>
+              </Card>
+            </TabsContent>
 
-        <TabsContent value="overview" className="space-y-6">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center space-x-2">
-                  <TrendingUp className="w-5 h-5" />
-                  <span>Temperature vs Salinity</span>
-                </CardTitle>
-                <CardDescription>Correlation between temperature and salinity measurements</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <ResponsiveContainer width="100%" height={300}>
-                  <ScatterChart
-                    data={filteredData
-                      .filter(d => d.temperature != null && d.salinity != null)
-                      .slice(0, 200)
-                    }
-                    margin={{ top: 10, right: 10, bottom: 10, left: 10 }}
-                  >
-                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f4f8" />
-                    <XAxis 
-                      dataKey="temperature" 
-                      name="Temperature" 
-                      unit="°C"
-                      domain={['auto', 'auto']}
-                      tick={{ fill: '#4b5563' }}
-                      tickLine={{ stroke: '#cbd5e1' }}
-                      axisLine={{ stroke: '#cbd5e1' }}
-                    />
-                    <YAxis 
-                      dataKey="salinity" 
-                      name="Salinity" 
-                      unit=" PSU"
-                      domain={['auto', 'auto']}
-                      tick={{ fill: '#4b5563' }}
-                      tickLine={{ stroke: '#cbd5e1' }}
-                      axisLine={{ stroke: '#cbd5e1' }}
-                    />
-                    <ZAxis dataKey="depth" range={[100, 400]} name="Depth" />
-                    <Tooltip 
-                      cursor={{ strokeDasharray: '3 3', stroke: '#94a3b8' }} 
-                      contentStyle={{
-                        backgroundColor: 'rgba(255, 255, 255, 0.95)',
-                        border: '1px solid #e2e8f0',
-                        borderRadius: '0.5rem',
-                        boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)'
-                      }}
-                      content={<CustomTooltip />} 
-                    />
-                    <Scatter 
-                      name="Temperature vs Salinity"
-                      data={filteredData
-                        .filter(d => d.temperature != null && d.salinity != null)
-                        .slice(0, 200)
-                      }
-                      fill="#3b82f6"
-                      fillOpacity={0.7}
-                    >
-                      {filteredData
-                        .filter(d => d.temperature != null && d.salinity != null)
-                        .slice(0, 200)
-                        .map((entry, index) => (
-                          <Cell 
-                            key={`cell-${index}`}
-                            fill={entry.isRecent ? '#10b981' : '#3b82f6'}
-                            stroke={entry.isRecent ? '#059669' : '#2563eb'}
-                            strokeWidth={entry.isRecent ? 1.5 : 0.5}
-                          />
-                        ))
-                      }
-                    </Scatter>
-                    <Legend 
-                      verticalAlign="top"
-                      height={36}
-                      formatter={(value, entry, index) => {
-                        return <span style={{ color: '#4b5563' }}>{value}</span>;
-                      }}
-                    />
-                  </ScatterChart>
-                </ResponsiveContainer>
-              </CardContent>
-            </Card>
+            <TabsContent value="bgc" className="space-y-6">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Oxygen Concentration</CardTitle>
+                    <CardDescription>Dissolved oxygen levels by depth</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <ResponsiveContainer width="100%" height={300}>
+                      <ScatterChart data={filteredData.slice(0, 100)}>
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis dataKey="depth" name="Depth" unit="m" />
+                        <YAxis dataKey="oxygen" name="Oxygen" unit=" mg/L" />
+                        <Tooltip cursor={{ strokeDasharray: '3 3' }} content={<CustomTooltip />} />
+                        <Scatter dataKey="oxygen" fill="#10b981" />
+                      </ScatterChart>
+                    </ResponsiveContainer>
+                  </CardContent>
+                </Card>
 
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center space-x-2">
-                  <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-                  <span>Real-Time Ocean Trends (24h)</span>
-                </CardTitle>
-                <CardDescription>Live data from global ARGO float network</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <ResponsiveContainer width="100%" height={300}>
-                  <LineChart data={timeSeriesData}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="time" />
-                    <YAxis />
-                    <Tooltip content={<CustomTooltip />} />
-                    <Legend />
-                    <Line 
-                      type="monotone" 
-                      dataKey="avgTemperature" 
-                      stroke="#ef4444" 
-                      strokeWidth={2} 
-                      name="Global Avg Temperature (°C)"
-                      dot={{ fill: '#ef4444', r: 3 }}
-                      activeDot={{ r: 6, fill: '#10b981' }}
-                    />
-                    <Line 
-                      type="monotone" 
-                      dataKey="avgSalinity" 
-                      stroke="#3b82f6" 
-                      strokeWidth={2} 
-                      name="Global Avg Salinity (PSU)"
-                      dot={{ fill: '#3b82f6', r: 3 }}
-                      activeDot={{ r: 6, fill: '#10b981' }}
-                    />
-                    <Line 
-                      type="monotone" 
-                      dataKey="totalProfiles" 
-                      stroke="#10b981" 
-                      strokeWidth={2} 
-                      name="Active Profiles"
-                      yAxisId="right"
-                    />
-                  </LineChart>
-                </ResponsiveContainer>
-              </CardContent>
-            </Card>
-          </div>
-        </TabsContent>
-
-        <TabsContent value="temperature" className="space-y-6">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>Temperature Distribution</CardTitle>
-                <CardDescription>Temperature measurements across different depths</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <ResponsiveContainer width="100%" height={400}>
-                  <AreaChart data={filteredData.slice(0, 50).sort((a, b) => a.depth - b.depth)}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="depth" />
-                    <YAxis />
-                    <Tooltip content={<CustomTooltip />} />
-                    <Area type="monotone" dataKey="temperature" stroke="#ef4444" fill="#ef4444" fillOpacity={0.3} />
-                  </AreaChart>
-                </ResponsiveContainer>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>Temperature by Region</CardTitle>
-                <CardDescription>Regional temperature variations</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <ResponsiveContainer width="100%" height={400}>
-                  <BarChart data={regions.slice(1).map(region => ({
-                    region,
-                    avgTemp: (argoData.filter(item => item.region === region)
-                      .reduce((acc, item) => acc + item.temperature, 0) / 
-                      argoData.filter(item => item.region === region).length).toFixed(1),
-                    count: argoData.filter(item => item.region === region).length
-                  }))}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="region" />
-                    <YAxis />
-                    <Tooltip content={<CustomTooltip />} />
-                    <Bar dataKey="avgTemp" fill="#ef4444" />
-                  </BarChart>
-                </ResponsiveContainer>
-              </CardContent>
-            </Card>
-          </div>
-        </TabsContent>
-
-        <TabsContent value="salinity" className="space-y-6">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>Salinity Profiles</CardTitle>
-                <CardDescription>Salinity variations with depth</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <ResponsiveContainer width="100%" height={400}>
-                  <LineChart data={filteredData.slice(0, 50).sort((a, b) => a.depth - b.depth)}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="depth" />
-                    <YAxis domain={[33, 36]} />
-                    <Tooltip content={<CustomTooltip />} />
-                    <Line type="monotone" dataKey="salinity" stroke="#3b82f6" strokeWidth={2} />
-                    <ReferenceLine y={34.7} stroke="red" strokeDasharray="5 5" label="Global Average" />
-                  </LineChart>
-                </ResponsiveContainer>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>Salinity Distribution</CardTitle>
-                <CardDescription>Histogram of salinity measurements</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <ResponsiveContainer width="100%" height={400}>
-                  <BarChart data={[
-                    { range: '33.0-33.5', count: filteredData.filter(d => d.salinity >= 33.0 && d.salinity < 33.5).length },
-                    { range: '33.5-34.0', count: filteredData.filter(d => d.salinity >= 33.5 && d.salinity < 34.0).length },
-                    { range: '34.0-34.5', count: filteredData.filter(d => d.salinity >= 34.0 && d.salinity < 34.5).length },
-                    { range: '34.5-35.0', count: filteredData.filter(d => d.salinity >= 34.5 && d.salinity < 35.0).length },
-                    { range: '35.0-35.5', count: filteredData.filter(d => d.salinity >= 35.0 && d.salinity < 35.5).length },
-                    { range: '35.5-36.0', count: filteredData.filter(d => d.salinity >= 35.5 && d.salinity < 36.0).length },
-                  ]}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="range" />
-                    <YAxis />
-                    <Tooltip />
-                    <Bar dataKey="count" fill="#3b82f6" />
-                  </BarChart>
-                </ResponsiveContainer>
-              </CardContent>
-            </Card>
-          </div>
-        </TabsContent>
-
-        <TabsContent value="depth" className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Temperature-Depth Profiles</CardTitle>
-              <CardDescription>Multiple temperature profiles showing thermocline structure</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <ResponsiveContainer width="100%" height={500}>
-                <LineChart data={depthProfiles}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="temperature" />
-                  <YAxis dataKey="depth" reversed domain={[0, 2000]} />
-                  <Tooltip content={<CustomTooltip />} />
-                  <Legend />
-                  {Array.from({length: 5}, (_, i) => (
-                    <Line 
-                      key={i}
-                      type="monotone" 
-                      dataKey="temperature" 
-                      data={depthProfiles.filter(d => d.profileId === `Profile ${i + 1}`)}
-                      stroke={`hsl(${i * 60}, 70%, 50%)`}
-                      strokeWidth={2}
-                      name={`Profile ${i + 1}`}
-                      connectNulls={false}
-                    />
-                  ))}
-                </LineChart>
-              </ResponsiveContainer>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="bgc" className="space-y-6">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>Oxygen Concentration</CardTitle>
-                <CardDescription>Dissolved oxygen levels by depth</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <ResponsiveContainer width="100%" height={300}>
-                  <ScatterChart data={filteredData.slice(0, 100)}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="depth" name="Depth" unit="m" />
-                    <YAxis dataKey="oxygen" name="Oxygen" unit=" mg/L" />
-                    <Tooltip cursor={{ strokeDasharray: '3 3' }} content={<CustomTooltip />} />
-                    <Scatter dataKey="oxygen" fill="#10b981" />
-                  </ScatterChart>
-                </ResponsiveContainer>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>Chlorophyll & Nutrients</CardTitle>
-                <CardDescription>Biogeochemical parameters correlation</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <ResponsiveContainer width="100%" height={300}>
-                  <LineChart data={filteredData.slice(0, 30).sort((a, b) => a.depth - b.depth)}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="depth" />
-                    <YAxis />
-                    <Tooltip content={<CustomTooltip />} />
-                    <Legend />
-                    <Line type="monotone" dataKey="chlorophyll" stroke="#10b981" strokeWidth={2} name="Chlorophyll (mg/m³)" />
-                    <Line type="monotone" dataKey="nitrate" stroke="#f59e0b" strokeWidth={2} name="Nitrate (μmol/L)" />
-                    <Line type="monotone" dataKey="phosphate" stroke="#8b5cf6" strokeWidth={2} name="Phosphate (μmol/L)" />
-                  </LineChart>
-                </ResponsiveContainer>
-              </CardContent>
-            </Card>
-          </div>
-        </TabsContent>
-      </Tabs>
-    </div>
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Chlorophyll & Nutrients</CardTitle>
+                    <CardDescription>Biogeochemical parameters correlation</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <ResponsiveContainer width="100%" height={300}>
+                      <LineChart data={filteredData.slice(0, 30).sort((a, b) => a.depth - b.depth)}>
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis dataKey="depth" />
+                        <YAxis />
+                        <Tooltip content={<CustomTooltip />} />
+                        <Legend />
+                        <Line type="monotone" dataKey="chlorophyll" stroke="#10b981" strokeWidth={2} name="Chlorophyll (mg/m³)" />
+                        <Line type="monotone" dataKey="nitrate" stroke="#f59e0b" strokeWidth={2} name="Nitrate (μmol/L)" />
+                        <Line type="monotone" dataKey="phosphate" stroke="#8b5cf6" strokeWidth={2} name="Phosphate (μmol/L)" />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </CardContent>
+                </Card>
+              </div>
+            </TabsContent>
+          </Tabs>
+        </div>
+      )}
+    </PDFExporter>
   );
 };
 

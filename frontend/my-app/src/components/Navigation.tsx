@@ -12,6 +12,8 @@ import {
     BookOpen,
     BarChart3,
     Settings,
+    Clock,
+    ChartBar,
     Users
 } from "lucide-react";
 
@@ -21,8 +23,10 @@ export const Navigation = () => {
     const navItems = [
         // { label: "Home", href: "/", icon: Home },
         { label: "Dashboard", href: "/dashboard", icon: BarChart3 },
-        { label: "ARGO Explorer", href: "/explorer", icon: Map },
-        { label: "AI Chat", href: "/chatbot", icon: MessageCircle },
+        { label: "ProfileGraphs", href: "/explorer", icon: ChartBar },
+        // { label: "AI Chat", href: "/chatbot", icon: MessageCircle },
+        { label: "Maps", href: "/map", icon: Map },
+        { label: "Timeline", href: "/timeline", icon: Clock },
         // { label: "Data Portal", href: "/data", icon: Database },
         // { label: "Admin", href: "/admin", icon: Settings },
         // { label: "About", href: "/about", icon: Info },

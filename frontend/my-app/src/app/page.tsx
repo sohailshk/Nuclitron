@@ -6,6 +6,7 @@ import { Globe, Database } from "lucide-react";
 import { useRouter } from 'next/navigation';
 import { useEffect } from 'react';
 import { Hero } from "@/components/Hero";
+import { FeaturesShowcase } from "@/components/FeaturesShowcase";
 import { ArgoExplorer } from "@/components/ArgoExplorer";
 import { AiChatInterface } from "@/components/AiChatInterface";
 import { TechStack } from "@/components/TechStack";
@@ -13,6 +14,7 @@ import { Footer } from "@/components/Footer";
 import { Features } from "@/components/Features";
 import { DataOverview } from "@/components/DataOverview";
 import { StatsSection } from "@/components/StatsSection";
+ 
 
 export default function Home() {
   const router = useRouter();
@@ -76,6 +78,7 @@ export default function Home() {
 
       <main>
         <Hero />
+        <FeaturesShowcase />
         <StatsSection />
         <Features />
         <DataOverview />

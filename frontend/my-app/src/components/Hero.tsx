@@ -10,7 +10,8 @@ import {
   BarChart3,
   Globe,
   Zap,
-  Shield
+  Shield,
+  Clock
 } from "lucide-react";
 import Link from "next/link";
 
@@ -36,9 +37,9 @@ export const Hero = () => {
 
           <div className="data-float">
             <h1 className="text-5xl md:text-7xl font-bold mb-6 leading-tight">
-              INCOIS ARGO
+              FloatChat
               <span className="block text-transparent bg-clip-text bg-gradient-to-r from-blue-200 to-cyan-200">
-                AI Platform
+                INCOIS Argo AI Platform
               </span>
             </h1>
             <p className="text-xl md:text-2xl text-blue-100 max-w-4xl mx-auto leading-relaxed">
@@ -72,6 +73,16 @@ export const Hero = () => {
               >
                 <Map className="w-5 h-5" />
                 <span>Map Visualization</span>
+              </Button>
+            </Link>
+            <Link href="/timeline">
+              <Button
+                variant="outline"
+                size="lg"
+                className="text-lg px-8 py-4 bg-white/10 border-white/30 text-white hover:bg-white hover:text-primary-deep flex items-center space-x-2"
+              >
+                <Clock className="w-5 h-5" />
+                <span>View Timeline</span>
               </Button>
             </Link>
             <Button

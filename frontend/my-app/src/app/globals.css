@@ -369,3 +369,7 @@
     animation: pulse-ocean 2s ease-in-out infinite;
   }
 }
+
+nextjs-portal{
+  display: none !important;
+}

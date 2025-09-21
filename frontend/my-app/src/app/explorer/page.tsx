@@ -166,14 +166,14 @@ export default function Explorer() {
             <div className="flex flex-col md:flex-row items-start md:items-center justify-between mb-6">
               <div>
                 <h1 className="text-3xl font-bold text-primary-deep mb-2">
-                  ARGO Data Analytics
+                  ARGO Data Analytics and Visualization
                 </h1>
                 <p className="text-muted-foreground">
                   Interactive charts and data visualization for ARGO float network
                 </p>
               </div>
               <div className="flex items-center space-x-3 mt-4 md:mt-0">
-                <Button variant="outline" size="sm" className="flex items-center space-x-2">
+                {/* <Button variant="outline" size="sm" className="flex items-center space-x-2">
                   <RefreshCw className="w-4 h-4" />
                   <span>Refresh</span>
                 </Button>
@@ -184,12 +184,12 @@ export default function Explorer() {
                 <Button variant="outline" size="sm" className="flex items-center space-x-2">
                   <Settings className="w-4 h-4" />
                   <span>Settings</span>
-                </Button>
+                </Button> */}
               </div>
             </div>
 
             {/* Controls */}
-            <div className="flex flex-wrap items-center gap-4">
+            {/* <div className="flex flex-wrap items-center gap-4">
               <div className="flex items-center space-x-2">
                 <Search className="w-4 h-4 text-muted-foreground" />
                 <Input
@@ -235,7 +235,7 @@ export default function Explorer() {
                   <span>{isPlaying ? 'Pause' : 'Play'}</span>
                 </Button>
               </div>
-            </div>
+            </div> */}
           </div>
 
           <div className="grid grid-cols-1 gap-8">
@@ -338,7 +338,7 @@ export default function Explorer() {
               </Card>
 
               {/* Quick Stats */}
-              <Card className="card-ocean">
+              {/* <Card className="card-ocean">
                 <div className="p-4">
                   <h3 className="font-semibold text-primary-deep mb-4">Quick Stats</h3>
                   <div className="space-y-3">
@@ -364,7 +364,7 @@ export default function Explorer() {
                     </div>
                   </div>
                 </div>
-              </Card>
+              </Card> */}
             </div>
           </div>
         </div>

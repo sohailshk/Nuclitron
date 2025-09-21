@@ -65,7 +65,7 @@ export const Header = () => {
                     </div>
 
                     <div className="flex items-center space-x-3">
-                        <Button variant="ghost" size="sm" className="hidden md:flex items-center space-x-1">
+                        {/* <Button variant="ghost" size="sm" className="hidden md:flex items-center space-x-1">
                             <Search className="w-4 h-4" />
                             <span>Search</span>
                         </Button>
@@ -78,7 +78,7 @@ export const Header = () => {
                         <Button className="btn-ocean hidden md:flex items-center space-x-1">
                             <Database className="w-4 h-4" />
                             <span>Data Access</span>
-                        </Button>
+                        </Button> */}
                         
                         <SignedOut>
                             <button className="bg-gradient-to-r from-purple-500 to-indigo-600 text-white rounded-full font-semibold text-sm sm:text-base h-10 sm:h-12 px-5 sm:px-6 shadow-lg hover:from-purple-600 hover:to-indigo-700 transition duration-300 ease-in-out focus:outline-none focus:ring-2 focus:ring-purple-400">

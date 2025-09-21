@@ -35,6 +35,10 @@ import {
   MessageSquare
 } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
+import { languageService } from "@/services/languageService";
+import { translationService as translator } from "@/services/translationService";
+import LanguageSelector from "@/components/LanguageSelector";
+import { generateReport, ReportPreview, ReportData } from "@/components/ReportGenerator";
 
 interface Message {
   id: string;
@@ -46,6 +50,8 @@ interface Message {
   error?: boolean;
   imageData?: string;
   hasImage?: boolean;
+  reportData?: ReportData;
+  showReport?: boolean;
 }
 
 export default function Chatbot() {
@@ -53,21 +59,27 @@ export default function Chatbot() {
     {
       id: '1',
       type: 'bot',
-      content: 'Hello! I\'m your AI assistant powered by our RAG system for ARGO oceanographic data. I can help you explore temperature profiles, salinity data, float locations, and provide intelligent insights from our real-time database. What would you like to know about ocean data?',
+      content: 'Hello! I\'m your AI assistant powered by our RAG system for ARGO oceanographic data. I can help you explore temperature profiles, salinity data, float locations, and generate high-quality visualizations using FLUX.1. Ask me anything about ocean data or request custom visualizations!',
       timestamp: new Date().toLocaleTimeString(),
       suggestions: [
-        'Show me temperature profiles in the Arabian Sea',
-        'What is the average salinity in the Indian Ocean?',
-        'Find floats near the equator',
-        'What are the deepest measurements we have?'
+        'What is the current temperature in the Bay of Bengal?',
+        'Explain the salinity patterns in the Indian Ocean',
+        'How do ARGO floats collect oceanographic data?',
+        'What are the latest observations from the Arabian Sea?',
+        'Show me depth profiles for the South China Sea',
+        'What critical advisories are active right now?',
+        'Compare temperature trends across different regions',
+        'Generate a report on recent ocean conditions'
       ]
     }
   ]);
   const [inputValue, setInputValue] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [apiKey, setApiKey] = useState('');
+  const [apiKey, setApiKey] = useState('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'); // Hardcoded HF API key
   const [systemStatus, setSystemStatus] = useState<'checking' | 'online' | 'offline'>('checking');
   const [showSuggestedQueries, setShowSuggestedQueries] = useState(false);
+  const [currentLanguage, setCurrentLanguage] = useState('en');
+  const [isTranslating, setIsTranslating] = useState(false);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => {
@@ -83,12 +95,28 @@ export default function Chatbot() {
     scrollToBottom();
   }, [messages]);
 
-  // Initialize API key from localStorage
+  // Initialize API key and language from localStorage
   useEffect(() => {
-    const savedApiKey = localStorage.getItem('hf_api_key') || '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';
+    const savedApiKey = localStorage.getItem('hf_api_key') || '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';
     if (savedApiKey) {
       setApiKey(savedApiKey);
     }
+    
+    // Initialize language
+    const currentLang = languageService.getCurrentLanguage();
+    setCurrentLanguage(currentLang);
+    
+    // Update welcome message in user's language
+    const welcomeMessage = languageService.translate('welcome', currentLang);
+    const multilingualSuggestions = languageService.getMultilingualSuggestions('visualization');
+    
+    setMessages([{
+      id: '1',
+      type: 'bot',
+      content: welcomeMessage,
+      timestamp: new Date().toLocaleTimeString(),
+      suggestions: multilingualSuggestions
+    }]);
   }, []);
 
   // Check system status
@@ -127,7 +155,7 @@ export default function Chatbot() {
 
     try {
       // Enhance prompt for oceanographic visualizations
-      const enhancedPrompt = `${prompt}`;
+      const enhancedPrompt = `High-quality scientific visualization: ${prompt}. Professional oceanographic data visualization, clean scientific style, detailed charts and graphs, ocean research quality, ARGO float data visualization, marine science illustration, high resolution, professional scientific publication quality`;
       
       const response = await fetch('https://api-inference.huggingface.co/models/black-forest-labs/FLUX.1-dev', {
         method: 'POST',
@@ -139,9 +167,9 @@ export default function Chatbot() {
           inputs: enhancedPrompt,
           parameters: {
             guidance_scale: 7.5,
-            num_inference_steps: 50,
+            num_inference_steps: 30,
             width: 1024,
-            height: 1024
+            height: 768
           }
         })
       });
@@ -323,6 +351,10 @@ Would you like me to generate a visualization or provide more specific informati
     return <div className="text-gray-700 whitespace-pre-wrap leading-relaxed">{content}</div>;
   };
 
+  const generateReportId = () => {
+    return `INCOIS-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+  };
+
   const handleSendMessage = async () => {
     if (!inputValue.trim() || isLoading) return;
 
@@ -338,21 +370,109 @@ Would you like me to generate a visualization or provide more specific informati
     const currentInput = inputValue;
     setInputValue('');
     setIsLoading(true);
+    
+    // Detect input language and translate if needed
+    const detectedLanguage = languageService.detectLanguage(currentInput);
+    let translatedInput = currentInput;
 
     try {
-      // Use our ChatAPI service to call the FastAPI backend
-      const chatResponse = await chatApi.sendMessage(currentInput);
+      // Check if user wants image generation
+      const needsImage = shouldGenerateImage(currentInput);
       
-      const botResponse: Message = {
-        id: (Date.now() + 1).toString(),
-        type: 'bot',
-        content: chatResponse.response_text,
-        timestamp: new Date().toLocaleTimeString(),
-        suggestions: chatResponse.suggestions || generateSuggestions(currentInput),
-        data: chatResponse.data_results
-      };
-      
-      setMessages(prev => [...prev, botResponse]);
+      if (needsImage) {
+        // Translate input to English for image generation if needed
+        if (detectedLanguage !== 'en') {
+          setIsTranslating(true);
+          translatedInput = await translator.translateToEnglish(currentInput, detectedLanguage);
+          setIsTranslating(false);
+        }
+        
+        // Generate image using Hugging Face FLUX.1
+        const { text, imageData } = await callHuggingFaceImageAPI(translatedInput);
+        
+        // Translate response back to user's language
+        let responseText = text || 'I\'ve generated a high-quality oceanographic visualization using FLUX.1 based on your request.';
+        if (currentLanguage !== 'en') {
+          responseText = await translator.translateToUserLanguage(responseText, currentLanguage);
+        }
+        
+        // Get multilingual suggestions
+        const suggestions = languageService.getMultilingualSuggestions('visualization');
+        
+        // Check if user wants a report
+        const wantsReport = /\b(report|generate.*report|create.*report|make.*report|pdf|document)\b/i.test(currentInput);
+        
+        // Create report data only if report is requested
+        const reportData: ReportData | undefined = wantsReport ? {
+          userQuery: currentInput,
+          aiResponse: responseText,
+          timestamp: new Date().toISOString(),
+          reportId: generateReportId(),
+          analysisType: 'Visualization Generation',
+          imageData: imageData
+        } : undefined;
+        
+        const botResponse: Message = {
+          id: (Date.now() + 1).toString(),
+          type: 'bot',
+          content: responseText,
+          timestamp: new Date().toLocaleTimeString(),
+          imageData: imageData,
+          hasImage: !!imageData,
+          suggestions: suggestions,
+          reportData: reportData,
+          showReport: wantsReport
+        };
+        
+        setMessages(prev => [...prev, botResponse]);
+      } else {
+        // Translate input to English for processing if needed
+        if (detectedLanguage !== 'en') {
+          setIsTranslating(true);
+          translatedInput = await translator.translateToEnglish(currentInput, detectedLanguage);
+          setIsTranslating(false);
+        }
+        
+        // Use our ChatAPI service to call the FastAPI backend for text responses
+        const chatResponse = await chatApi.sendMessage(translatedInput);
+        
+        // Translate response back to user's language
+        let responseText = chatResponse.response_text;
+        if (currentLanguage !== 'en') {
+          responseText = await translator.translateToUserLanguage(responseText, currentLanguage);
+        }
+        
+        // Get multilingual suggestions based on the query type
+        const suggestionCategory = currentInput.toLowerCase().includes('temperature') ? 'temperature' : 
+                                 currentInput.toLowerCase().includes('salinity') ? 'salinity' : 'visualization';
+        const suggestions = languageService.getMultilingualSuggestions(suggestionCategory);
+        
+        // Check if user wants a report
+        const wantsReport = /\b(report|generate.*report|create.*report|make.*report|pdf|document)\b/i.test(currentInput);
+        
+        // Create report data for text responses only if report is requested
+        const reportData: ReportData | undefined = wantsReport ? {
+          userQuery: currentInput,
+          aiResponse: responseText,
+          timestamp: new Date().toISOString(),
+          reportId: generateReportId(),
+          analysisType: suggestionCategory.charAt(0).toUpperCase() + suggestionCategory.slice(1) + ' Analysis',
+          dataPoints: chatResponse.data_results?.length || 0
+        } : undefined;
+        
+        const botResponse: Message = {
+          id: (Date.now() + 1).toString(),
+          type: 'bot',
+          content: responseText,
+          timestamp: new Date().toLocaleTimeString(),
+          suggestions: suggestions,
+          data: chatResponse.data_results,
+          reportData: reportData,
+          showReport: wantsReport
+        };
+        
+        setMessages(prev => [...prev, botResponse]);
+      }
     } catch (error) {
       const errorMessage: Message = {
         id: (Date.now() + 1).toString(),
@@ -413,6 +533,22 @@ Would you like me to generate a visualization or provide more specific informati
     setShowSuggestedQueries(false);
   };
 
+  const handleLanguageChange = async (languageCode: string) => {
+    setCurrentLanguage(languageCode);
+    
+    // Update welcome message in new language
+    const welcomeMessage = languageService.translate('welcome', languageCode);
+    const multilingualSuggestions = languageService.getMultilingualSuggestions('visualization');
+    
+    setMessages([{
+      id: '1',
+      type: 'bot',
+      content: welcomeMessage,
+      timestamp: new Date().toLocaleTimeString(),
+      suggestions: multilingualSuggestions
+    }]);
+  };
+
   const downloadImage = (imageData: string, messageId: string) => {
     try {
       const byteCharacters = atob(imageData);
@@ -436,30 +572,55 @@ Would you like me to generate a visualization or provide more specific informati
     }
   };
 
+  const handleGenerateReport = (reportData: ReportData) => {
+    generateReport(
+      reportData,
+      (success: boolean, error?: Error) => {
+        if (success) {
+          console.log('Report generated successfully');
+        } else {
+          console.error('Report generation failed:', error);
+        }
+      }
+    );
+  };
+
   const suggestedQueries = [
     {
       icon: Database,
-      title: "Temperature Profiles",
-      query: "Show me temperature profiles in the Arabian Sea",
-      description: "Analyze ocean temperature data by depth",
-    },
-    {
-      icon: Map,
-      title: "ARGO Float Locations",
-      query: "Create a map showing ARGO float locations",
-      description: "Visualize global float distribution",
+      title: "Ocean Data Analysis",
+      query: "What is the current temperature in the Bay of Bengal?",
+      description: "Get real-time oceanographic measurements",
     },
     {
       icon: BarChart3,
-      title: "Salinity Analysis",
-      query: "What are the salinity levels near the equator?",
-      description: "Compare salinity measurements across regions",
+      title: "Regional Comparison",
+      query: "Compare salinity levels between Arabian Sea and Indian Ocean",
+      description: "Analyze differences across ocean regions",
+    },
+    {
+      icon: Waves,
+      title: "ARGO Float Info",
+      query: "How do ARGO floats collect oceanographic data?",
+      description: "Learn about autonomous ocean monitoring",
+    },
+    {
+      icon: Globe,
+      title: "Critical Advisories",
+      query: "What are the current critical advisories for the Indian Ocean?",
+      description: "Check active alerts and warnings",
+    },
+    {
+      icon: Map,
+      title: "Depth Profiles",
+      query: "Show me depth profiles for the South China Sea",
+      description: "Explore temperature and salinity by depth",
     },
     {
       icon: Image,
-      title: "Ocean Visualization",
-      query: "Generate an ocean temperature visualization",
-      description: "Create high-quality charts with FLUX.1",
+      title: "Generate Report",
+      query: "Generate a comprehensive report on recent ocean conditions",
+      description: "Create detailed oceanographic analysis report",
     },
   ];
 
@@ -530,18 +691,25 @@ Would you like me to generate a visualization or provide more specific informati
               </div>
               <div>
                 <h2 className="text-lg font-semibold text-gray-900">
-                  ARGO Ocean Data Assistant
+                  {languageService.translate('oceanData', currentLanguage)} {languageService.translate('assistant', currentLanguage) || 'Assistant'}
                 </h2>
                 <p className="text-sm text-gray-500">
                   {apiKey
-                    ? "Online • Powered by FLUX.1"
+                    ? `${languageService.translate('online', currentLanguage)} • Powered by FLUX.1 ${isTranslating ? '• Translating...' : ''}`
                     : "Configure API key to get started"}
                 </p>
               </div>
             </div>
-            <Button variant="ghost" size="sm">
-              <HelpCircle className="w-4 h-4" />
-            </Button>
+            <div className="flex items-center space-x-2">
+              <LanguageSelector 
+                onLanguageChange={handleLanguageChange}
+                variant="ghost"
+                size="sm"
+              />
+              <Button variant="ghost" size="sm">
+                <HelpCircle className="w-4 h-4" />
+              </Button>
+            </div>
           </div>
         </div>
 
@@ -652,6 +820,16 @@ Would you like me to generate a visualization or provide more specific informati
                           </div>
                         )}
 
+                        {/* Report Generation */}
+                        {message.showReport && message.reportData && (
+                          <div className="mt-4">
+                            <ReportPreview 
+                              data={message.reportData}
+                              onGenerateReport={() => handleGenerateReport(message.reportData!)}
+                            />
+                          </div>
+                        )}
+
                         {message.type === "bot" && !message.error && (
                           <div className="flex items-center justify-between mt-3">
                             <span className="text-xs text-gray-500">
@@ -720,15 +898,19 @@ Would you like me to generate a visualization or provide more specific informati
                 ))}
 
                 {isLoading && (
-                  <div className="flex space-x-4">
-                    <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center">
+                  <div className="flex space-x-4 animate-fadeIn">
+                    <div className="w-8 h-8 rounded-full bg-gradient-to-r from-blue-600 to-cyan-600 flex items-center justify-center shadow-lg">
                       <Bot className="w-4 h-4 text-white" />
                     </div>
-                    <div className="bg-gray-50 rounded-lg px-4 py-3">
-                      <div className="flex items-center space-x-2">
-                        <Loader2 className="w-4 h-4 animate-spin text-blue-600" />
-                        <span className="text-sm text-gray-600">
-                          Generating response...
+                    <div className="bg-gradient-to-r from-blue-50 to-cyan-50 rounded-lg px-4 py-3 border border-blue-100 shadow-sm">
+                      <div className="flex items-center space-x-3">
+                        <div className="flex space-x-1">
+                          <div className="w-2 h-2 bg-blue-600 rounded-full animate-bounce"></div>
+                          <div className="w-2 h-2 bg-blue-600 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
+                          <div className="w-2 h-2 bg-blue-600 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+                        </div>
+                        <span className="text-sm text-blue-700 font-medium">
+                          {isTranslating ? 'Translating...' : 'Analyzing oceanographic data...'}
                         </span>
                       </div>
                     </div>
@@ -742,13 +924,64 @@ Would you like me to generate a visualization or provide more specific informati
         {/* Fixed Input Area at Bottom */}
         <div className="fixed bottom-0 right-0 left-64 bg-white border-t border-gray-200 px-6 py-4 z-20">
           <div className="max-w-4xl mx-auto">
+            {/* Quick Action Buttons */}
+            {apiKey && (
+              <div className="flex flex-wrap gap-2 mb-3">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setInputValue("What's the current temperature in the Arabian Sea?")}
+                  className="text-xs h-7 px-2 quick-action-btn hover:bg-blue-50 hover:border-blue-300"
+                  disabled={isLoading}
+                >
+                  🌡️ Temperature
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setInputValue("Show me salinity levels in the Bay of Bengal")}
+                  className="text-xs h-7 px-2 quick-action-btn hover:bg-green-50 hover:border-green-300"
+                  disabled={isLoading}
+                >
+                  🧂 Salinity
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setInputValue("What are the current critical advisories?")}
+                  className="text-xs h-7 px-2 quick-action-btn hover:bg-red-50 hover:border-red-300"
+                  disabled={isLoading}
+                >
+                  🚨 Alerts
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setInputValue("Compare ocean conditions across regions")}
+                  className="text-xs h-7 px-2 quick-action-btn hover:bg-purple-50 hover:border-purple-300"
+                  disabled={isLoading}
+                >
+                  📊 Compare
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setInputValue("Generate a comprehensive report on current ocean conditions")}
+                  className="text-xs h-7 px-2 quick-action-btn hover:bg-orange-50 hover:border-orange-300"
+                  disabled={isLoading}
+                >
+                  📋 Report
+                </Button>
+              </div>
+            )}
+            
             <div className="relative">
               <Input
                 value={inputValue}
                 onChange={(e) => setInputValue(e.target.value)}
                 placeholder={
                   apiKey
-                    ? "Ask about ARGO data or request visualizations..."
+                    ? languageService.translate('typeMessage', currentLanguage)
                     : "Configure API key to get started..."
                 }
                 className="pr-12 py-3 text-base border-gray-300 focus:border-blue-500 focus:ring-blue-500"
@@ -779,6 +1012,38 @@ Would you like me to generate a visualization or provide more specific informati
           </div>
         </div>
       </div>
+      
+      {/* Custom Styles */}
+      <style jsx>{`
+        @keyframes fadeIn {
+          from { opacity: 0; transform: translateY(10px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+        
+        @keyframes slideIn {
+          from { opacity: 0; transform: translateX(-20px); }
+          to { opacity: 1; transform: translateX(0); }
+        }
+        
+        .animate-fadeIn {
+          animation: fadeIn 0.3s ease-out;
+        }
+        
+        .animate-slideIn {
+          animation: slideIn 0.4s ease-out;
+        }
+        
+        .message-hover:hover {
+          transform: translateY(-1px);
+          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+          transition: all 0.2s ease;
+        }
+        
+        .quick-action-btn:hover {
+          transform: scale(1.05);
+          transition: transform 0.2s ease;
+        }
+      `}</style>
     </div>
   );
 }
